@@ -1,0 +1,78 @@
+app:
+  name: lighter-bot
+  log_level: DEBUG   # so you see optimizer details
+
+# ... (ws, capture, metrics unchanged)
+
+api:
+  base_url: "http://127.0.0.1:8787"
+  key: ""
+  secret: ""
+
+maker:
+  pair: "market:1"
+  spread_bps: 10
+  size: 0.001
+  loop_delay: 2              # faster loop so you see logs frequently
+  limits:
+    max_cancels: 30
+    max_latency_ms: 2000
+  dry_run: true              # <— NEW: print quotes instead of posting
+
+
+optimizer:
+  enabled: true
+  scan_interval_sec: 6   # faster so you see rotation quickly
+  top_n: 2               # watch 2 markets at a time
+  min_open_interest: 0
+  max_spread_bps: 25
+  w_funding: 1.0
+  w_oi: 0.2
+  spread_bps_penalty: 0.02
+  min_dwell_sec: 8
+  hysteresis_score_margin: 0.03
+  max_switches_per_hour: 60
+  mock:
+    enabled: true
+    # markets:  # optional override; omit to use sensible defaults in main.py
+    #   - { market_id: "market:1", symbol: "BTC-PERP", base_mid: 107000.0, amp_funding_8h: 0.0015, amp_oi: 1000000.0, base_spread_bps: 6.0 }
+    #   - { market_id: "market:55", symbol: "ALT-1",     base_mid: 0.366,    amp_funding_8h: 0.0030, amp_oi: 120000.0,  base_spread_bps: 10.0 }
+    #   - { market_id: "market:21", symbol: "ALT-2",     base_mid: 2.15,     amp_funding_8h: 0.0022, amp_oi: 350000.0,  base_spread_bps: 8.0 }
+    #   - { market_id: "market:8",  symbol: "ALT-3",     base_mid: 0.045,    amp_funding_8h: 0.0040, amp_oi: 80000.0,   base_spread_bps: 14.0 }
+
+alerts:
+  enabled: true
+  # paste your Discord webhook URL here
+  discord_webhook_url: "https://discord.com/api/webhooks/XXXX/XXXX"
+
+telemetry:
+  enabled: false   # set true to expose /metrics
+  port: 9100
+
+watchdogs:
+  ws_stale_seconds: 30
+  quote_stale_seconds: 20
+  reminder_every_seconds: 300
+
+ws:
+  url: "wss://mainnet.zklighter.elliot.ai/stream/market_stats:all"
+  fallback_on_fail: true     # after N failures, use synthetic
+  max_failures: 3
+
+capture:
+  write_raw: true
+  raw_path: "logs/ws_raw.jsonl"
+
+optimizer:
+  scan_interval_s: 30
+  top_n: 3
+  min_open_interest: 0
+  max_spread_bps: 25
+  w_funding: 1.0
+  w_oi: 0.2
+  spread_bps_penalty: 0.02
+  min_dwell_s: 120
+  hysteresis_score_margin: 0.05
+  max_switches_per_hour: 12
+
+

@@ -1,0 +1,18 @@
+2025-11-03 10:33:10,323 [INFO] Starting Lighter Bot M4 (Self-Trade Guard + Hedger)...
+2025-11-03 10:33:11,825 [INFO] [feeder] No mids after 1.5s; starting SyntheticMidFeeder for market:1
+2025-11-03 10:33:11,826 [INFO] [feeder] SyntheticMidFeeder started for market:1 from 107000
+2025-11-03 10:33:11,869 [INFO] MakerEngineDryRun started for market:1
+2025-11-03 10:33:11,869 [INFO] [market:1] mid=106978.6000 | bid=106818.1321 | ask=107139.0679
+2025-11-03 10:33:11,869 [INFO] [maker] simulated fill sell 0.001@107139.0679
+2025-11-03 10:33:11,869 [INFO] HedgerDryRun started.
+2025-11-03 10:33:11,869 [INFO] [state] market:1 fill=sell 0.001@107139.0679 | inv=-0.0010 pnl=0.16
+2025-11-03 10:33:11,869 [INFO] [hedger] applied fill sell 0.001@107139.0679 on market:1
+2025-11-03 10:33:12,664 [WARNING] [listener] socket error on wss://mainnet.zklighter.elliot.ai/stream/market_stats:all: server rejected WebSocket connection: HTTP 404
+2025-11-03 10:33:14,412 [WARNING] [listener] socket error on wss://mainnet.zklighter.elliot.ai/stream/market_stats:all?channel=market_stats%3Aall: server rejected WebSocket connection: HTTP 404
+2025-11-03 10:33:14,871 [WARNING] [guard] blocked due to inventory limit -0.001 > 0.0005
+2025-11-03 10:33:17,142 [WARNING] [listener] socket error on wss://mainnet.zklighter.elliot.ai/stream/market_stats:all?channels=market_stats%3Aall: server rejected WebSocket connection: HTTP 404
+2025-11-03 10:33:17,871 [WARNING] [guard] blocked due to inventory limit -0.001 > 0.0005
+2025-11-03 10:33:20,873 [WARNING] [guard] blocked due to inventory limit -0.001 > 0.0005
+2025-11-03 10:33:21,881 [WARNING] [listener] socket error on wss://mainnet.zklighter.elliot.ai/stream/market_stats:all?topic=market_stats%3Aall: server rejected WebSocket connection: HTTP 404
+2025-11-03 10:33:23,874 [WARNING] [guard] blocked due to inventory limit -0.001 > 0.0005
+2025-11-03 10:33:26,875 [WARNING] [guard] blocked due to inventory limit -0.001 > 0.0005
