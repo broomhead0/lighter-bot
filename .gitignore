@@ -1,27 +1,24 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg-info/
-.eggs/
-
-# Virtual env & caches
+# Virtualenvs / local env
 .venv/
-.venv*/
+venv/
 .env
-.cache/
-.mypy_cache/
+
+# Python cache / tooling
+__pycache__/
+*.pyc
 .pytest_cache/
+.mypy_cache/
+.cache/
 
-# Project runtime artifacts
-logs/
-*.log
-*.jsonl
-run.log
-
-# OS/editor
+# Editors / OS
 .DS_Store
 .vscode/
-.idea/
+
+# Project logs / data captures
+logs/
+data/
+
+# Node / misc (future-proofing)
+node_modules/
+dist/
+build/
