@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug lighter-bot (core.main)",
+      "type": "python",
+      "request": "launch",
+      "module": "core.main",
+      "justMyCode": true,
+      "env": {
+        "LIGHTER_CONFIG": "${workspaceFolder}/config.yaml",
+        "PYTHONUNBUFFERED": "1"
+      },
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

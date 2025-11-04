@@ -6,6 +6,7 @@ from decimal import Decimal, getcontext
 # extra precision so tiny bps steps don't underflow
 getcontext().prec = 28
 
+
 class SyntheticMidFeeder:
     """
     Robust synthetic mid-price feeder.
@@ -44,7 +45,9 @@ class SyntheticMidFeeder:
         if not hasattr(self.state, "last_mid"):
             self.state.last_mid = 0
 
-        self.logger.info(f"[feeder] SyntheticMidFeeder started for {self.pair} from {self.mid}")
+        self.logger.info(
+            f"[feeder] SyntheticMidFeeder started for {self.pair} from {self.mid}"
+        )
 
     async def run(self):
         while True:
@@ -66,10 +69,14 @@ class SyntheticMidFeeder:
                 self.mid *= move
 
                 if self.mid <= 0:
-                    self.mid = self.mean_target if self.mean_target > 0 else Decimal("1")
+                    self.mid = (
+                        self.mean_target if self.mean_target > 0 else Decimal("1")
+                    )
 
                 # Update state
-                if hasattr(self.state, "update_mid") and callable(getattr(self.state, "update_mid")):
+                if hasattr(self.state, "update_mid") and callable(
+                    getattr(self.state, "update_mid")
+                ):
                     self.state.update_mid(self.pair, self.mid)
                 else:
                     self.state.mids[self.pair] = self.mid

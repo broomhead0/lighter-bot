@@ -6,14 +6,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 @dataclass
 class CaptureConfig:
     write_raw: bool = True
     raw_path: str = "logs/ws_raw.jsonl"
 
+
 @dataclass
 class MetricsConfig:
     report_interval_sec: int = 30
+
 
 @dataclass
 class WSConfig:
@@ -23,10 +26,12 @@ class WSConfig:
     max_reconnect_backoff_sec: int = 60
     subscriptions: list = None
 
+
 @dataclass
 class AppConfig:
     name: str = "lighter-bot"
     log_level: str = "INFO"
+
 
 @dataclass
 class Config:
@@ -34,6 +39,7 @@ class Config:
     ws: WSConfig
     capture: CaptureConfig
     metrics: MetricsConfig
+
 
 def load_config(path: str = "config.yaml") -> Config:
     with open(path, "r") as f:

@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class PairMetrics:
-    market_id: str                   # canonical id, e.g. "market:1"
-    symbol: Optional[str] = None     # optional human-readable, e.g. "BTC-PERP"
-    funding_1h: Optional[float] = None    # decimal (0.0005 == 0.05% per hour)
+    market_id: str  # canonical id, e.g. "market:1"
+    symbol: Optional[str] = None  # optional human-readable, e.g. "BTC-PERP"
+    funding_1h: Optional[float] = None  # decimal (0.0005 == 0.05% per hour)
     funding_8h: Optional[float] = None
     funding_24h: Optional[float] = None
-    open_interest: Optional[float] = None # notional or units
-    spread_bps: Optional[float] = None    # (ask-bid)/mid * 1e4
-    vol24h: Optional[float] = None        # optional 24h volume
+    open_interest: Optional[float] = None  # notional or units
+    spread_bps: Optional[float] = None  # (ask-bid)/mid * 1e4
+    vol24h: Optional[float] = None  # optional 24h volume
 
 
 @dataclass(frozen=True)
@@ -34,23 +34,26 @@ class OptimizerConfig:
     # rotation / stability controls
     min_dwell_s: int = 120
     hysteresis_score_margin: float = 0.05  # keep near-cutoff incumbents
-    max_switches_per_hour: int = 12        # churn guard
+    max_switches_per_hour: int = 12  # churn guard
 
 
 class FundingDataSource:
     """Minimal protocol for a metrics provider (implemented by core.rest_client.RestClient)."""
+
     async def fetch_pair_metrics(self) -> List[PairMetrics]:
         raise NotImplementedError
 
 
 class MakerPairsUpdater:
     """Minimal API for the maker engine to accept an updated active-pair set."""
+
     def update_active_pairs(self, market_ids: Sequence[str]) -> None:
         raise NotImplementedError
 
 
 class StateStoreAdapter:
     """Minimal surface of StateStore used by the optimizer."""
+
     def set_active_pairs(self, pairs: Sequence[str]) -> None: ...
     def get_active_pairs(self) -> List[str]: ...
     def set_pair_metrics(self, metrics: Dict[str, PairMetrics]) -> None: ...
@@ -80,7 +83,7 @@ class FundingOptimizer:
 
         self._last_switch_ts: float = 0.0
         self._switch_count_window: List[float] = []  # timestamps of recent switches
-        self._last_scores: Dict[str, float] = {}      # score cache for hysteresis
+        self._last_scores: Dict[str, float] = {}  # score cache for hysteresis
 
         self._task: Optional[asyncio.Task] = None
         self._running = False
@@ -88,7 +91,9 @@ class FundingOptimizer:
     def start(self) -> None:
         if self._task is None or self._task.done():
             self._running = True
-            self._task = asyncio.create_task(self._run_loop(), name="FundingOptimizerLoop")
+            self._task = asyncio.create_task(
+                self._run_loop(), name="FundingOptimizerLoop"
+            )
             logger.info("[optimizer] started.")
 
     async def stop(self) -> None:
@@ -206,7 +211,9 @@ class FundingOptimizer:
 
         # churn guard (switches/hour)
         one_hour_ago = now - 3600.0
-        self._switch_count_window = [t for t in self._switch_count_window if t >= one_hour_ago]
+        self._switch_count_window = [
+            t for t in self._switch_count_window if t >= one_hour_ago
+        ]
         if len(self._switch_count_window) >= self._cfg.max_switches_per_hour:
             return False
 

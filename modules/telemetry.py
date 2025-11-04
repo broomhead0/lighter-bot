@@ -7,6 +7,7 @@ import logging
 
 LOG = logging.getLogger("telemetry")
 
+
 class _MetricsStore:
     def __init__(self):
         self._gauges: Dict[str, float] = {}
@@ -30,12 +31,14 @@ class _MetricsStore:
         with self._lock:
             return dict(self._gauges), dict(self._counters), dict(self._heartbeats)
 
+
 class Telemetry:
     """
     Minimal Prometheus-style exporter with no external deps.
     - Exposes /metrics on <port>
     - Provides gauges, counters, and named heartbeats
     """
+
     def __init__(self, enabled: bool = False, port: int = 9100):
         self.enabled = enabled
         self.port = port
@@ -52,6 +55,7 @@ class Telemetry:
             return
 
         store = self.metrics
+
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 if self.path != "/metrics":
@@ -89,14 +93,21 @@ class Telemetry:
                 return
 
         self._server = HTTPServer(("0.0.0.0", self.port), Handler)
-        self._thread = threading.Thread(target=self._server.serve_forever, name="TelemetryHTTP", daemon=True)
+        self._thread = threading.Thread(
+            target=self._server.serve_forever, name="TelemetryHTTP", daemon=True
+        )
         self._thread.start()
         LOG.info("[telemetry] started on port %d", self.port)
 
     # Public metric helpers
-    def set_gauge(self, name: str, value: float): self.metrics.set_gauge(name, value)
-    def inc_counter(self, name: str, inc: float = 1.0): self.metrics.inc_counter(name, inc)
-    def heartbeat(self, name: str): self.metrics.heartbeat(name)
+    def set_gauge(self, name: str, value: float):
+        self.metrics.set_gauge(name, value)
+
+    def inc_counter(self, name: str, inc: float = 1.0):
+        self.metrics.inc_counter(name, inc)
+
+    def heartbeat(self, name: str):
+        self.metrics.heartbeat(name)
 
     # Convenience aliases used by other modules
     touch = heartbeat

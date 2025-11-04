@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run: lighter-bot (main)",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["-m", "core.main"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONUNBUFFERED": "1",
+          "LIGHTER_CONFIG": "${workspaceFolder}/config.yaml"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Test: pytest",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["-m", "pytest", "-q"],
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "Lint: ruff",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/ruff",
+      "args": ["check", "--fix", "."],
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "Format: black",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/black",
+      "args": ["."],
+      "options": { "cwd": "${workspaceFolder}" }
+    }
+  ]
+}

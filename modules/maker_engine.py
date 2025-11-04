@@ -25,20 +25,26 @@ class MakerEngine:
         self,
         config: Dict[str, Any],
         state: Any = None,
-        alert_manager: Any = None,   # M7 optional
-        telemetry: Any = None,       # M7 optional
+        alert_manager: Any = None,  # M7 optional
+        telemetry: Any = None,  # M7 optional
     ):
         self.cfg = config or {}
         self.state = state
         self.alerts = alert_manager
         self.telemetry = telemetry
 
-        maker_cfg = (self.cfg.get("maker") or {}) if isinstance(self.cfg.get("maker"), dict) else {}
+        maker_cfg = (
+            (self.cfg.get("maker") or {})
+            if isinstance(self.cfg.get("maker"), dict)
+            else {}
+        )
         self.market = maker_cfg.get("pair", "market:1")
         self.size = float(maker_cfg.get("size", 0.001))
         self.spread_bps = float(maker_cfg.get("spread_bps", 10.0))  # 10 bps default
         self.refresh_seconds = float(maker_cfg.get("refresh_seconds", 5.0))
-        self.randomize_bps = float(maker_cfg.get("randomize_bps", 4.0))  # random widen/narrow
+        self.randomize_bps = float(
+            maker_cfg.get("randomize_bps", 4.0)
+        )  # random widen/narrow
 
         self._stop = asyncio.Event()
 
@@ -58,8 +64,14 @@ class MakerEngine:
                 # touch heartbeat for M7 watchdogs
                 self._touch_quote()
 
-                LOG.info("[market:%s] mid=%.4f | bid=%.4f | ask=%.4f | spread=%.2fbps",
-                         self.market, mid, bid, ask, spread)
+                LOG.info(
+                    "[market:%s] mid=%.4f | bid=%.4f | ask=%.4f | spread=%.2fbps",
+                    self.market,
+                    mid,
+                    bid,
+                    ask,
+                    spread,
+                )
                 await asyncio.sleep(self.refresh_seconds)
         except asyncio.CancelledError:
             pass
@@ -118,6 +130,7 @@ class MakerEngine:
 
     # local synthetic mid (very cheap wander) for when WS hasn't filled state yet
     _syn_mid_anchor = time.time()
+
     def _synthetic_mid(self) -> float:
         t = time.time() - self._syn_mid_anchor
         base = 107000.0

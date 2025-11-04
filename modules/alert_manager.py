@@ -7,6 +7,7 @@ from urllib import request, error
 
 LOG = logging.getLogger("alert")
 
+
 class AlertManager:
     """
     Lightweight Discord webhook alerting, no external deps.
@@ -43,7 +44,9 @@ class AlertManager:
         level: one of {"info","warning","error","kill_switch"}
         """
         if not self.enabled or self._remote_disabled or not self.webhook_url:
-            LOG.info("[alert:dryrun] %s | %s | %s | %s", level, title, message, fields or {})
+            LOG.info(
+                "[alert:dryrun] %s | %s | %s | %s", level, title, message, fields or {}
+            )
             return
 
         payload = self._build_payload(level, title, message, fields, ping)
@@ -58,11 +61,13 @@ class AlertManager:
         ping: bool,
     ) -> Dict[str, Any]:
         color = {
-            "info": 0x2b8a3e,        # green-ish
-            "warning": 0xffc107,     # amber
-            "error": 0xdc3545,       # red
-            "kill_switch": 0x6f42c1, # purple
-        }.get(level, 0x4b5563)       # default gray
+            "info": 0x2B8A3E,  # green-ish
+            "warning": 0xFFC107,  # amber
+            "error": 0xDC3545,  # red
+            "kill_switch": 0x6F42C1,  # purple
+        }.get(
+            level, 0x4B5563
+        )  # default gray
 
         embed_fields = []
         if fields:
@@ -73,25 +78,34 @@ class AlertManager:
 
         return {
             "content": content[:1990] if content else None,
-            "embeds": [{
-                "title": f"[{self.app_name}] {title}"[:256],
-                "color": color,
-                "fields": embed_fields[:24],
-            }],
+            "embeds": [
+                {
+                    "title": f"[{self.app_name}] {title}"[:256],
+                    "color": color,
+                    "fields": embed_fields[:24],
+                }
+            ],
         }
 
     async def _post_json(self, payload: Dict[str, Any]) -> None:
         data = json.dumps(payload).encode("utf-8")
 
         def _do_post():
-            req = request.Request(self.webhook_url, data=data, headers={"Content-Type": "application/json"})
+            req = request.Request(
+                self.webhook_url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+            )
             try:
                 with request.urlopen(req, timeout=10) as resp:
                     resp.read()
             except error.HTTPError as e:
                 # Auto-disable on 4xx (bad/blocked webhook); log once
                 if 400 <= e.code < 500:
-                    LOG.warning("[alert] disabling remote alerts due to HTTP %s; switching to dry-run.", e.code)
+                    LOG.warning(
+                        "[alert] disabling remote alerts due to HTTP %s; switching to dry-run.",
+                        e.code,
+                    )
                     self._remote_disabled = True
                     return
                 LOG.error("[alert] HTTPError %s %s", e.code, e.read())
@@ -104,7 +118,14 @@ class AlertManager:
         await loop.run_in_executor(None, _do_post)
 
     # Convenience shortcuts
-    async def info(self, title: str, message: str = "", **kwargs):        await self.send("info", title, message, **kwargs)
-    async def warning(self, title: str, message: str = "", **kwargs):     await self.send("warning", title, message, **kwargs)
-    async def error(self, title: str, message: str = "", **kwargs):       await self.send("error", title, message, **kwargs)
-    async def kill_switch(self, title: str, message: str = "", **kwargs): await self.send("kill_switch", title, message, **kwargs)
+    async def info(self, title: str, message: str = "", **kwargs):
+        await self.send("info", title, message, **kwargs)
+
+    async def warning(self, title: str, message: str = "", **kwargs):
+        await self.send("warning", title, message, **kwargs)
+
+    async def error(self, title: str, message: str = "", **kwargs):
+        await self.send("error", title, message, **kwargs)
+
+    async def kill_switch(self, title: str, message: str = "", **kwargs):
+        await self.send("kill_switch", title, message, **kwargs)

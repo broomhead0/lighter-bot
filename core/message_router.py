@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 
 logger = logging.getLogger(__name__)
 
+
 class MessageRouter:
     """
     Routes raw WS frames and extracts mids from a variety of possible shapes.
@@ -16,6 +17,7 @@ class MessageRouter:
     Debug:
       - Set ROUTER_DEBUG=1 to dump the first 3 unknown frames (keys only or full if small).
     """
+
     def __init__(self, state_store, market_id_map=None):
         self.state = state_store
         self.market_id_map = market_id_map or {}
@@ -61,14 +63,14 @@ class MessageRouter:
         if mid is None:
             # attempt average of index + last (with multiple key variants)
             index = (
-                self._to_dec(e.get("index_price")) or
-                self._to_dec(e.get("indexPrice")) or
-                self._to_dec(e.get("index"))
+                self._to_dec(e.get("index_price"))
+                or self._to_dec(e.get("indexPrice"))
+                or self._to_dec(e.get("index"))
             )
             last = (
-                self._to_dec(e.get("last_price")) or
-                self._to_dec(e.get("lastPrice")) or
-                self._to_dec(e.get("last"))
+                self._to_dec(e.get("last_price"))
+                or self._to_dec(e.get("lastPrice"))
+                or self._to_dec(e.get("last"))
             )
             if index is not None and last is not None:
                 mid = (index + last) / Decimal("2")
@@ -113,7 +115,11 @@ class MessageRouter:
             logger.info("[router] got frame channel=%s type=%s", channel, typ)
 
             # 1) Direct "market_stats" key
-            if isinstance(d, dict) and "market_stats" in d and isinstance(d["market_stats"], list):
+            if (
+                isinstance(d, dict)
+                and "market_stats" in d
+                and isinstance(d["market_stats"], list)
+            ):
                 any_mid = False
                 for e in d["market_stats"]:
                     pair, mid = self._derive_mid_from_entry(e)
@@ -166,4 +172,6 @@ class MessageRouter:
             # If we got here, we didn’t extract mids
             self._log_unknown(d)
             if isinstance(d, dict):
-                logger.info("[router] no mids extracted; keys seen: top=%s", list(d.keys())[:5])
+                logger.info(
+                    "[router] no mids extracted; keys seen: top=%s", list(d.keys())[:5]
+                )

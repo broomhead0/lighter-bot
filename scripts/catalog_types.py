@@ -3,6 +3,7 @@ import argparse
 from collections import Counter, defaultdict
 from modules.raw_replayer import iter_jsonl
 
+
 def main():
     ap = argparse.ArgumentParser(description="Catalog message types and keys")
     ap.add_argument("--file", default="logs/ws_raw.jsonl")
@@ -26,6 +27,7 @@ def main():
         print(f"\n[{t}]")
         for k, c in key_counts[t].most_common(12):
             print(f"  {k:20s} {c}")
+
 
 if __name__ == "__main__":
     main()

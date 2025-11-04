@@ -1,9 +1,13 @@
 from __future__ import annotations
-import argparse, json
+import argparse
+import json
 from modules.raw_replayer import iter_jsonl
 
+
 def main():
-    ap = argparse.ArgumentParser(description="Extract latest market stats for select markets")
+    ap = argparse.ArgumentParser(
+        description="Extract latest market stats for select markets"
+    )
     ap.add_argument("--file", default="logs/ws_raw.jsonl")
     ap.add_argument("--markets", default="0,1", help="Comma list of market ids")
     args = ap.parse_args()
@@ -20,6 +24,7 @@ def main():
                 latest[str(k)] = v
 
     print(json.dumps(latest, indent=2))
+
 
 if __name__ == "__main__":
     main()

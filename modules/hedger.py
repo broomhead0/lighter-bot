@@ -1,11 +1,11 @@
-import asyncio
 import logging
-from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
+
 class HedgerDryRun:
     """Simulates fills received from MakerEngine."""
+
     def __init__(self, state):
         self.state = state
         self.running = True

@@ -5,7 +5,7 @@ import logging
 import os
 import random
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 LOG = logging.getLogger("listener")
 
@@ -29,27 +29,41 @@ class MarketDataListener:
         self,
         config: Dict[str, Any],
         state: Any = None,
-        alert_manager: Any = None,   # M7 optional
-        telemetry: Any = None,       # M7 optional
+        alert_manager: Any = None,  # M7 optional
+        telemetry: Any = None,  # M7 optional
     ):
         self.cfg = config or {}
         self.state = state
         self.alerts = alert_manager
         self.telemetry = telemetry
 
-        app_cfg = (self.cfg.get("app") or {}) if isinstance(self.cfg.get("app"), dict) else {}
+        app_cfg = (
+            (self.cfg.get("app") or {}) if isinstance(self.cfg.get("app"), dict) else {}
+        )
         self.app_name = app_cfg.get("name", "lighter-bot")
 
-        ws_cfg = (self.cfg.get("ws") or {}) if isinstance(self.cfg.get("ws"), dict) else {}
+        ws_cfg = (
+            (self.cfg.get("ws") or {}) if isinstance(self.cfg.get("ws"), dict) else {}
+        )
         self.ws_url = ws_cfg.get("url") or os.environ.get("WS_URL")
         self.ws_fail_fallback = bool(ws_cfg.get("fallback_on_fail", True))
         self.ws_max_failures = int(ws_cfg.get("max_failures", 3))
 
-        cap_cfg = (self.cfg.get("capture") or {}) if isinstance(self.cfg.get("capture"), dict) else {}
+        cap_cfg = (
+            (self.cfg.get("capture") or {})
+            if isinstance(self.cfg.get("capture"), dict)
+            else {}
+        )
         self.capture_raw = bool(cap_cfg.get("write_raw", False))
-        self.capture_path = cap_cfg.get("raw_path", os.path.join("logs", "ws_raw.jsonl"))
+        self.capture_path = cap_cfg.get(
+            "raw_path", os.path.join("logs", "ws_raw.jsonl")
+        )
 
-        syn_cfg = (self.cfg.get("synthetic") or {}) if isinstance(self.cfg.get("synthetic"), dict) else {}
+        syn_cfg = (
+            (self.cfg.get("synthetic") or {})
+            if isinstance(self.cfg.get("synthetic"), dict)
+            else {}
+        )
         self.synthetic_market = syn_cfg.get("market", "market:1")
         self.synthetic_start = float(syn_cfg.get("mid_start", 107000.0))
         self.synthetic_step = float(syn_cfg.get("tick_step", 5.0))
@@ -73,7 +87,10 @@ class MarketDataListener:
         if not (self.ws_url and websockets):
             LOG.info(
                 "[feeder] No usable WS (url=%s websockets=%s); starting SyntheticMidFeeder for %s from %s",
-                self.ws_url, bool(websockets), self.synthetic_market, self.synthetic_start
+                self.ws_url,
+                bool(websockets),
+                self.synthetic_market,
+                self.synthetic_start,
             )
             await self._run_synthetic()
             return
@@ -86,13 +103,25 @@ class MarketDataListener:
                 break
             except Exception as e:
                 self._consecutive_failures += 1
-                LOG.warning("[listener] socket error on %s: %s (fail #%d)",
-                            self.ws_url, e, self._consecutive_failures)
+                LOG.warning(
+                    "[listener] socket error on %s: %s (fail #%d)",
+                    self.ws_url,
+                    e,
+                    self._consecutive_failures,
+                )
                 await self._alert("warning", "WS disconnected", str(e))
-                if self.ws_fail_fallback and self._consecutive_failures >= self.ws_max_failures:
-                    LOG.warning("[listener] max failures reached; falling back to synthetic feed.")
-                    await self._alert("warning", "WS fallback to synthetic",
-                                      f"failures={self._consecutive_failures}")
+                if (
+                    self.ws_fail_fallback
+                    and self._consecutive_failures >= self.ws_max_failures
+                ):
+                    LOG.warning(
+                        "[listener] max failures reached; falling back to synthetic feed."
+                    )
+                    await self._alert(
+                        "warning",
+                        "WS fallback to synthetic",
+                        f"failures={self._consecutive_failures}",
+                    )
                     await self._run_synthetic()
                     return
                 await asyncio.sleep(2.0)
@@ -120,7 +149,9 @@ class MarketDataListener:
         mid = self.synthetic_start
         t = 0.0
         while not self._stop.is_set():
-            drift = self.synthetic_step * (random.random() - 0.5) + self.synthetic_jitter * random.uniform(-1, 1)
+            drift = self.synthetic_step * (
+                random.random() - 0.5
+            ) + self.synthetic_jitter * random.uniform(-1, 1)
             wave = 3.0 * self.synthetic_step * (0.5 * (1 + math_sin_safe(t)))
             mid = max(1.0, mid + drift + wave)
 
@@ -190,6 +221,7 @@ class MarketDataListener:
 def math_sin_safe(x: float) -> float:
     try:
         import math
+
         return math.sin(x)
     except Exception:
         return 0.0

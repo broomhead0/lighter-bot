@@ -1,0 +1,30 @@
+{
+  "name": "lighter-bot",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "features": {},
+  "postCreateCommand": "python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt -r dev-requirements.txt && pre-commit install",
+  "remoteEnv": {
+    "PYTHONUNBUFFERED": "1",
+    "LIGHTER_CONFIG": "/workspaces/lighter-bot/config.yaml"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "github.vscode-pull-request-github",
+        "eamodio.gitlens",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/workspaces/lighter-bot/.venv/bin/python"
+      }
+    }
+  },
+  "workspaceFolder": "/workspaces/lighter-bot",
+  "runArgs": ["--init", "--network=host"],
+  "containerUser": "vscode"
+}

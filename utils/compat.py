@@ -13,9 +13,12 @@ class ConfigCompat(SimpleNamespace):
       - one-way alias mapping (e.g., w_funding -> apr_weight)
       - 'warn once' behavior on unknown attrs to avoid log spam
     """
+
     _warned: Dict[str, bool] = {}
 
-    def __init__(self, base: Dict[str, Any], defaults: Dict[str, Any], aliases: Dict[str, str]):
+    def __init__(
+        self, base: Dict[str, Any], defaults: Dict[str, Any], aliases: Dict[str, str]
+    ):
         # load base into namespace first
         super().__init__(**base)
         self.__dict__["_defaults"] = defaults
@@ -36,7 +39,9 @@ class ConfigCompat(SimpleNamespace):
             return defaults[name]
         # warn once, then return a safe neutral default (0 / 0.0 / False / None heuristic)
         if not self._warned.get(name):
-            LOG.warning("[compat] optimizer config missing '%s' — using neutral default.", name)
+            LOG.warning(
+                "[compat] optimizer config missing '%s' — using neutral default.", name
+            )
             self._warned[name] = True
         # neutral default heuristic
         # strings -> "", bool -> False, numbers -> 0.0

@@ -1,10 +1,10 @@
 from __future__ import annotations
 import argparse
-import os
 
 from modules.raw_replayer import replay_jsonl
 from modules.message_router import MessageRouter
 from core.logger import logger
+
 
 def main():
     ap = argparse.ArgumentParser(description="Replay captured WS frames from JSONL")
@@ -28,9 +28,11 @@ def main():
         for k in ("0", "1", 0, 1):
             m = ms.get(k)
             if m:
-                logger.info(f"[REPLAY] MARKET {m.get('market_id')} mark={m.get('mark_price')} "
-                            f"idx={m.get('index_price')} fr={m.get('funding_rate')} "
-                            f"oi={m.get('open_interest')} ")
+                logger.info(
+                    f"[REPLAY] MARKET {m.get('market_id')} mark={m.get('mark_price')} "
+                    f"idx={m.get('index_price')} fr={m.get('funding_rate')} "
+                    f"oi={m.get('open_interest')} "
+                )
 
     def on_error(frame: dict):
         logger.error(f"[REPLAY] ERROR <- {frame}")
@@ -54,6 +56,7 @@ def main():
     logger.info(f"Replaying {args.file} at {args.speed}x ...")
     replay_jsonl(args.file, route, speed=args.speed)
     logger.info("Replay complete.")
+
 
 if __name__ == "__main__":
     main()

@@ -30,7 +30,9 @@ class WSClient:
       - auto-reconnects with backoff
     """
 
-    def __init__(self, cfg: WSConfig, on_message: Callable[[Dict[str, Any]], Awaitable[None]]):
+    def __init__(
+        self, cfg: WSConfig, on_message: Callable[[Dict[str, Any]], Awaitable[None]]
+    ):
         self._cfg = cfg
         self._on_message = on_message
         self._session: Optional[aiohttp.ClientSession] = None
@@ -72,7 +74,9 @@ class WSClient:
             self._session = aiohttp.ClientSession(timeout=timeout)
 
         logger.info("[ws] connecting to %s ...", self._cfg.url)
-        self._ws = await self._session.ws_connect(self._cfg.url, heartbeat=self._cfg.ping_interval_sec)
+        self._ws = await self._session.ws_connect(
+            self._cfg.url, heartbeat=self._cfg.ping_interval_sec
+        )
         logger.info("[ws] connected.")
 
         subs = list(self._cfg.subscriptions or [])
@@ -97,7 +101,11 @@ class WSClient:
                 err = self._ws.exception()
                 logger.warning("[ws] error frame: %s", err)
                 break
-            elif msg.type in (aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSING, aiohttp.WSMsgType.CLOSED):
+            elif msg.type in (
+                aiohttp.WSMsgType.CLOSE,
+                aiohttp.WSMsgType.CLOSING,
+                aiohttp.WSMsgType.CLOSED,
+            ):
                 logger.info("[ws] server closed connection.")
                 break
 

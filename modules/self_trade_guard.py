@@ -2,6 +2,7 @@ import logging
 from decimal import Decimal
 from typing import Optional
 
+
 class SelfTradeGuard:
     """
     Protects against crossed-book quoting, excessive inventory exposure, and invalid states.
@@ -16,8 +17,12 @@ class SelfTradeGuard:
         self.cfg = cfg or {}
 
         # --- Price band protection ---
-        self.price_band_bps = Decimal(str(self.cfg.get("price_band_bps", 50)))  # ±bps around mid
-        self.crossed_book_protection = bool(self.cfg.get("crossed_book_protection", True))
+        self.price_band_bps = Decimal(
+            str(self.cfg.get("price_band_bps", 50))
+        )  # ±bps around mid
+        self.crossed_book_protection = bool(
+            self.cfg.get("crossed_book_protection", True)
+        )
 
         # --- Inventory caps ---
         max_inv_units = self.cfg.get("max_position_units", 0.01)
@@ -38,12 +43,16 @@ class SelfTradeGuard:
 
         # --- Kill-switch flags ---
         self.kill_on_crossed_book = bool(self.cfg.get("kill_on_crossed_book", True))
-        self.kill_on_inventory_breach = bool(self.cfg.get("kill_on_inventory_breach", True))
+        self.kill_on_inventory_breach = bool(
+            self.cfg.get("kill_on_inventory_breach", True)
+        )
         self.backoff_seconds_on_block = int(self.cfg.get("backoff_seconds_on_block", 2))
 
     # ---------------------- Helpers ----------------------
 
-    def _get_mid_for_market(self, market: Optional[str], fallback_mid: Decimal) -> Decimal:
+    def _get_mid_for_market(
+        self, market: Optional[str], fallback_mid: Decimal
+    ) -> Decimal:
         mids = getattr(self.state, "mids", None)
         if isinstance(mids, dict) and market in mids:
             try:
@@ -78,7 +87,9 @@ class SelfTradeGuard:
         if not self.crossed_book_protection:
             return True
         if bid >= ask:
-            self.logger.warning(f"[guard] crossed book detected (bid {bid} >= ask {ask})")
+            self.logger.warning(
+                f"[guard] crossed book detected (bid {bid} >= ask {ask})"
+            )
             if self.kill_on_crossed_book:
                 self.logger.error("[guard] Kill-switch: crossed-book state")
             return False
@@ -111,7 +122,9 @@ class SelfTradeGuard:
 
     # ---------------------- Public API ----------------------
 
-    def is_allowed(self, mid: Decimal, bid: Decimal, ask: Decimal, market: Optional[str] = None) -> bool:
+    def is_allowed(
+        self, mid: Decimal, bid: Decimal, ask: Decimal, market: Optional[str] = None
+    ) -> bool:
         """Return True if quoting is allowed for given market."""
         if not self._check_crossed_book(mid, bid, ask):
             return False

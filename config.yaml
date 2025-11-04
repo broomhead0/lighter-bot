@@ -74,5 +74,3 @@ optimizer:
   min_dwell_s: 120
   hysteresis_score_margin: 0.05
   max_switches_per_hour: 12
-
-

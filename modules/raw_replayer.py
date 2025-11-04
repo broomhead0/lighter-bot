@@ -3,6 +3,7 @@ import json
 import time
 from typing import Callable, Iterable
 
+
 def iter_jsonl(path: str) -> Iterable[dict]:
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
@@ -14,6 +15,7 @@ def iter_jsonl(path: str) -> Iterable[dict]:
             except Exception:
                 # skip malformed
                 continue
+
 
 def replay_jsonl(path: str, on_frame: Callable[[dict], None], speed: float = 1.0):
     """

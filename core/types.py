@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TypedDict, Literal, Any, Optional
+from typing import TypedDict, Literal, Any
 
 MsgType = Literal[
     "connected",
@@ -7,6 +7,7 @@ MsgType = Literal[
     "update/market_stats",
     "error",
 ]
+
 
 class WSFrame(TypedDict, total=False):
     type: MsgType
