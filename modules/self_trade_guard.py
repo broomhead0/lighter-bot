@@ -53,13 +53,22 @@ class SelfTradeGuard:
     def _get_mid_for_market(
         self, market: Optional[str], fallback_mid: Decimal
     ) -> Decimal:
+        # Try StateStore.get_mid() first
+        if hasattr(self.state, "get_mid") and market:
+            try:
+                mid = self.state.get_mid(market)
+                if mid is not None:
+                    return Decimal(str(mid))
+            except Exception:
+                pass
+        # Fallback: state.mids dict
         mids = getattr(self.state, "mids", None)
         if isinstance(mids, dict) and market in mids:
             try:
                 return Decimal(str(mids[market]))
             except Exception:
                 pass
-        # fallback: state.last_mid (float) or provided fallback
+        # Fallback: state.last_mid (float) or provided fallback
         last_mid = getattr(self.state, "last_mid", None)
         try:
             return Decimal(str(last_mid)) if last_mid is not None else fallback_mid
@@ -67,11 +76,23 @@ class SelfTradeGuard:
             return fallback_mid
 
     def _get_inventory_for_market(self, market: Optional[str]) -> Decimal:
+        # Try StateStore.get_inventory() first
+        if hasattr(self.state, "get_inventory"):
+            try:
+                inv = self.state.get_inventory(market)
+                if isinstance(inv, Decimal):
+                    return inv
+                if isinstance(inv, dict) and market:
+                    return Decimal(str(inv.get(market, 0)))
+                return Decimal(str(inv))
+            except Exception:
+                pass
+        # Fallback: state.inventory dict or scalar
         inv = getattr(self.state, "inventory", 0)
         # dict per-pair inventory
         if isinstance(inv, dict):
             try:
-                v = inv.get(market, 0)
+                v = inv.get(market, 0) if market else 0
                 return Decimal(str(v))
             except Exception:
                 return Decimal("0")

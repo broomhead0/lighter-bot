@@ -65,14 +65,6 @@ watchdogs:
   quote_stale_seconds: 20
   reminder_every_seconds: 300
   ws_stale_seconds: 30
-guard:
-  price_band_bps: 50
-  crossed_book_protection: true
-  max_position_units: 0.01
-  max_inventory_notional: 1000
-  kill_on_crossed_book: true
-  kill_on_inventory_breach: true
-  backoff_seconds_on_block: 2
 ws:
   fallback_on_fail: true
   max_failures: 3

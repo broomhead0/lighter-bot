@@ -1,0 +1,32 @@
+services:
+  lighter-bot:
+    build: .
+    container_name: lighter-bot
+    restart: unless-stopped
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - LIGHTER_CONFIG=/app/config.yaml
+      - LOG_LEVEL=INFO
+      - WS_URL=${WS_URL:-wss://mainnet.zklighter.elliot.ai/stream/market_stats:all}
+    volumes:
+      # Mount config for easy updates
+      - ./config.yaml:/app/config.yaml:ro
+      # Persist logs
+      - ./logs:/app/logs
+      # Persist captured data
+      - ./data:/app/data
+    ports:
+      - "9100:9100" # Telemetry/metrics port
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9100/health', timeout=5)" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - lighter-net
+
+networks:
+  lighter-net:
+    driver: bridge

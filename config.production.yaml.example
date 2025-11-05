@@ -1,0 +1,90 @@
+# Production Configuration Example
+# Copy this to config.production.yaml and customize
+
+app:
+  name: lighter-bot
+  log_level: INFO  # Use INFO or WARNING for production
+
+# API Configuration (use environment variables in production)
+api:
+  base_url: ${API_BASE_URL}
+  key: ${API_KEY}
+  secret: ${API_SECRET}
+
+# Maker Configuration
+maker:
+  dry_run: false  # Set to false for live trading
+  pair: "market:1"
+  spread_bps: 8
+  size: 5
+  post_only: true
+  limits:
+    max_cancels: 60
+    max_latency_ms: 2000
+
+# Optimizer
+optimizer:
+  enabled: true
+  scan_interval_s: 30
+  top_n: 3
+  min_open_interest: 0
+  max_spread_bps: 25
+  w_funding: 1.0
+  w_oi: 0.2
+  spread_bps_penalty: 0.02
+  min_dwell_s: 120
+  hysteresis_score_margin: 0.05
+  max_switches_per_hour: 12
+
+# Self-Trade Guard
+guard:
+  max_inventory_notional: 250
+  block_crossed_book: true
+  max_quote_width_bps: 50
+
+# Alerts
+alerts:
+  enabled: true
+  discord_webhook_url: ${DISCORD_WEBHOOK}
+
+# Telemetry (ENABLE for production!)
+telemetry:
+  enabled: true
+  port: 9100
+
+# Watchdogs
+watchdogs:
+  ws_stale_seconds: 30
+  quote_stale_seconds: 20
+  reminder_every_seconds: 300
+
+# WebSocket
+ws:
+  url: ${WS_URL}
+  fallback_on_fail: true
+  max_failures: 3
+
+# Capture (optional - can disable for production)
+capture:
+  write_raw: false  # Set to false to save disk space
+  raw_path: logs/ws_raw.jsonl
+
+# Replay (DISABLED for production)
+replay:
+  enabled: false
+  path: logs/ws_raw.jsonl
+  speed: 1.0
+  market_filter: []
+
+# Chaos (DISABLED for production)
+chaos:
+  enabled: false
+  latency:
+    enabled: false
+  reconnect:
+    enabled: false
+  quote_width:
+    enabled: false
+  cancel_rate:
+    enabled: false
+

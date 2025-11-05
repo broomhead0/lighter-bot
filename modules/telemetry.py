@@ -1,9 +1,10 @@
 # modules/telemetry.py
+import json
+import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Dict, Optional
-import logging
 
 LOG = logging.getLogger("telemetry")
 
@@ -58,6 +59,34 @@ class Telemetry:
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
+                # Health check endpoint
+                if self.path == "/health":
+                    _, _, hbs = store.snapshot()
+                    now = time.time()
+
+                    # Basic health: check if we have recent heartbeats
+                    ws_age = now - hbs.get("ws", 0) if hbs.get("ws") else 999999
+                    quote_age = now - hbs.get("quote", 0) if hbs.get("quote") else 999999
+
+                    # Consider healthy if we have heartbeats within last 60s
+                    is_healthy = ws_age < 60.0 or quote_age < 60.0
+
+                    status = 200 if is_healthy else 503
+                    body = {
+                        "status": "healthy" if is_healthy else "unhealthy",
+                        "ws_age_seconds": round(ws_age, 2),
+                        "quote_age_seconds": round(quote_age, 2),
+                        "timestamp": round(now, 2)
+                    }
+                    data = json.dumps(body).encode("utf-8")
+                    self.send_response(status)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+
+                # Metrics endpoint
                 if self.path != "/metrics":
                     self.send_response(404)
                     self.end_headers()

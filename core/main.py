@@ -43,6 +43,26 @@ try:
 except Exception:  # noqa
     StateStore = None  # type: ignore
 
+try:
+    from core.message_router import MessageRouter
+except Exception:  # noqa
+    MessageRouter = None  # type: ignore
+
+try:
+    from scripts.replay_sim import ReplaySimulator
+except Exception:  # noqa
+    ReplaySimulator = None  # type: ignore
+
+try:
+    from modules.chaos_injector import ChaosInjector
+except Exception:  # noqa
+    ChaosInjector = None  # type: ignore
+
+try:
+    from modules.self_trade_guard import SelfTradeGuard
+except Exception:  # noqa
+    SelfTradeGuard = None  # type: ignore
+
 from modules.alert_manager import AlertManager
 from modules.telemetry import Telemetry
 
@@ -457,10 +477,61 @@ async def main():
     state = StateStore() if StateStore else SimpleNamespace()
     state_adapter = _StateAdapter(state)
 
-    listener = None
-    if MarketDataListener:
-        listener = _try_construct(
-            MarketDataListener,
+    # --- Chaos injector (M8) ---
+    chaos = None
+    if ChaosInjector:
+        try:
+            chaos = ChaosInjector(cfg)
+            if chaos.enabled:
+                logging.getLogger("main").info("[main] CHAOS INJECTOR enabled")
+        except Exception as e:
+            logging.getLogger("main").warning(
+                "[main] failed to initialize chaos injector: %s", e
+            )
+
+    # --- Replay mode (M8) ---
+    replay_cfg = cfg.get("replay") or {}
+    replay_enabled = bool(replay_cfg.get("enabled", False))
+    replay_sim = None
+
+    if replay_enabled:
+        if not ReplaySimulator or not MessageRouter:
+            logging.getLogger("main").error(
+                "[main] replay enabled but ReplaySimulator/MessageRouter not available"
+            )
+            sys.exit(1)
+
+        replay_path = replay_cfg.get("path", "logs/ws_raw.jsonl")
+        replay_speed = float(replay_cfg.get("speed", 1.0))
+        replay_market_filter = replay_cfg.get("market_filter")  # None or list
+
+        # Create router for replay
+        market_id_map = cfg.get("market_id_map") or {}
+        router = MessageRouter(state, market_id_map=market_id_map)
+
+        # Create simulator
+        replay_sim = ReplaySimulator(
+            path=replay_path,
+            router=router.route,
+            speed=replay_speed,
+            market_filter=replay_market_filter,
+            telemetry=telemetry,
+            chaos_injector=chaos,
+        )
+
+        logging.getLogger("main").info(
+            "[main] REPLAY MODE enabled: path=%s speed=%.2fx filter=%s",
+            replay_path,
+            replay_speed,
+            replay_market_filter,
+        )
+        # Disable live listener in replay mode
+        listener = None
+    else:
+        listener = None
+        if MarketDataListener:
+            listener = _try_construct(
+                MarketDataListener,
             [
                 (
                     (),
@@ -477,6 +548,16 @@ async def main():
             ],
         )
 
+    # SelfTradeGuard (critical safety feature)
+    self_trade_guard = None
+    if SelfTradeGuard:
+        guard_cfg = (cfg.get("guard") or {}) if isinstance(cfg.get("guard"), dict) else {}
+        try:
+            self_trade_guard = SelfTradeGuard(state=state, cfg=guard_cfg)
+            logging.getLogger("main").info("[main] SelfTradeGuard initialized")
+        except Exception as e:
+            logging.getLogger("main").warning(f"[main] SelfTradeGuard init failed: {e}")
+
     maker = None
     if MakerEngine:
         maker = _try_construct(
@@ -489,6 +570,8 @@ async def main():
                         "state": state,
                         "alert_manager": alert_mgr,
                         "telemetry": telemetry,
+                        "chaos_injector": chaos,
+                        "guard": self_trade_guard,
                     },
                 ),
                 ((), {"config": cfg, "state": state}),
@@ -626,7 +709,18 @@ async def main():
             "[%s] no run/start; assuming self-managed.", name
         )
 
-    if listener:
+    if chaos and chaos.enabled:
+        # Start chaos injector background task
+        tasks.append(asyncio.create_task(chaos.run(), name="chaos"))
+
+    if replay_sim:
+        # Replay mode: run simulator instead of listener
+        async def run_replay():
+            await replay_sim.run()
+            stop_event.set()  # Stop when replay completes
+
+        tasks.append(asyncio.create_task(run_replay(), name="replay"))
+    elif listener:
         tasks.append(asyncio.create_task(run_component("listener", listener)))
     if optimizer:
         tasks.append(asyncio.create_task(run_component("optimizer", optimizer)))
