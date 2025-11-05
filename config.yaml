@@ -32,12 +32,12 @@ optimizer:
   w_funding: 1.0
   w_oi: 0.2
 replay:
-  enabled: true
+  enabled: false
   market_filter: []
   path: logs/ws_raw.jsonl
   speed: 1.0
 chaos:
-  enabled: true
+  enabled: false
   latency:
     enabled: true
     probability: 0.3
