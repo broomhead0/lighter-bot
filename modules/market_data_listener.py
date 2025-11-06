@@ -136,6 +136,19 @@ class MarketDataListener:
         LOG.info("[listener] connecting %s", self.ws_url)
         async with websockets.connect(self.ws_url, ping_interval=20, ping_timeout=20) as ws:  # type: ignore
             await self._alert("info", "WS connected", self.ws_url)
+            
+            # Try to subscribe to market_stats channel
+            # Lighter WebSocket may require subscription message
+            try:
+                subscribe_msg = json.dumps({
+                    "type": "subscribe",
+                    "channel": "market_stats:all"
+                })
+                await ws.send(subscribe_msg)
+                LOG.info("[listener] sent subscription: market_stats:all")
+            except Exception as e:
+                LOG.debug("[listener] subscription attempt failed (may not be required): %s", e)
+            
             while not self._stop.is_set():
                 msg = await asyncio.wait_for(ws.recv(), timeout=60)  # type: ignore
                 ts = time.time()
