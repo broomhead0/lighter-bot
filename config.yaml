@@ -76,4 +76,4 @@ guard:
 ws:
   fallback_on_fail: true
   max_failures: 3
-  url: wss://mainnet.zklighter.elliot.ai/stream/market_stats:all
+  url: wss://mainnet.zklighter.elliot.ai/stream
