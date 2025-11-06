@@ -134,7 +134,13 @@ class MarketDataListener:
     async def _run_ws_once(self):
         assert websockets is not None  # guarded by caller
         LOG.info("[listener] connecting %s", self.ws_url)
-        async with websockets.connect(self.ws_url, ping_interval=20, ping_timeout=20) as ws:  # type: ignore
+        # Disable automatic ping/pong - Lighter server may handle it differently
+        async with websockets.connect(
+            self.ws_url, 
+            ping_interval=None,  # Disable automatic ping
+            ping_timeout=None,
+            close_timeout=10
+        ) as ws:  # type: ignore
             await self._alert("info", "WS connected", self.ws_url)
 
             # Try to subscribe to market_stats channel
