@@ -187,6 +187,10 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
         (("guard", "backoff_seconds_on_block"), "GUARD_BACKOFF_SECONDS_ON_BLOCK", "int"),
         (("replay", "enabled"), "REPLAY_ENABLED", "bool"),
         (("chaos", "enabled"), "CHAOS_ENABLED", "bool"),
+        (("optimizer", "enabled"), "OPTIMIZER_ENABLED", "bool"),
+        (("optimizer", "top_n"), "OPTIMIZER_TOP_N", "int"),
+        (("optimizer", "scan_interval_s"), "OPTIMIZER_SCAN_INTERVAL_S", "int"),
+        (("optimizer", "min_dwell_s"), "OPTIMIZER_MIN_DWELL_S", "int"),
     ]
 
     for path, env_name, kind in specs:
@@ -455,6 +459,7 @@ def _opt_cfg_from_dict(root_cfg: Dict[str, Any]) -> ConfigCompat:
 
     # Defaults copied from modules/funding_optimizer.py::OptimizerConfig
     defaults: Dict[str, Any] = {
+        "enabled": True,
         "scan_interval_s": 30,
         "top_n": 3,
         "min_open_interest": 0.0,
@@ -691,9 +696,16 @@ async def main():
     data_source = _DSAdapter(raw_ds)
 
     optimizer = None
+    opt_cfg_ns = None
     if FundingOptimizer:
         opt_cfg_ns = _opt_cfg_from_dict(cfg)
         maker_updater = _MakerUpdater(maker, logging.getLogger("optimizer"))
+
+        if getattr(opt_cfg_ns, "enabled", True) is False:
+            logging.getLogger("optimizer").info("[optimizer] disabled via config")
+            opt_cfg_ns = None
+
+    if FundingOptimizer and opt_cfg_ns is not None:
 
         # Prefer the (data_source, state, maker_updater, cfg) signature
         sig = None
