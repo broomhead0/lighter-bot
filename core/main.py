@@ -235,6 +235,16 @@ def _coerce_env_value(raw: str, kind: str) -> Any:
     return raw
 
 
+class _FallbackMetrics:
+    def __init__(self, markets: Optional[List[str]] = None):
+        self.markets = markets or ["market:1", "market:2", "market:55", "market:99"]
+
+    async def best_pairs(self, top_n: int = 2) -> List[str]:
+        idx = int(time.time() // 15) % len(self.markets)
+        ordered = self.markets[idx:] + self.markets[:idx]
+        return ordered[: max(1, top_n)]
+
+
 def _apr_to_8h(apr: float) -> float:
     return apr / 1095.0
 
