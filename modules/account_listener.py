@@ -45,6 +45,7 @@ class AccountListener:
         self.state = state
         self.hedger = hedger
         self.telemetry = telemetry
+        self.debug = bool(self.cfg.get("debug", False))
 
         ws_cfg = self.cfg.get("ws", {}) if isinstance(self.cfg.get("ws"), dict) else {}
         self.ws_url = ws_cfg.get("url") or "wss://mainnet.zklighter.elliot.ai/stream"
@@ -122,6 +123,8 @@ class AccountListener:
                         continue
 
                     msg_type = obj.get("type")
+                    if self.debug:
+                        LOG.debug("[account] frame: %s", obj)
                     if msg_type == "ping":
                         try:
                             await ws.send(json.dumps({"type": "pong"}))

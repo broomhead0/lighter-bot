@@ -88,6 +88,7 @@ ws:
   log_mid_interval_s: 1.0
 account_listener:
   enabled: true
+  debug: true
   ws:
     url: wss://mainnet.zklighter.elliot.ai/stream
     auth_token: ${WS_AUTH_TOKEN:}
