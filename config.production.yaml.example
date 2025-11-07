@@ -77,6 +77,13 @@ ws:
     - "market_stats/all"
   auth_token: ${WS_AUTH_TOKEN:}
   log_mid_interval_s: 1.0  # throttle mid-price INFO logs (seconds between entries)
+account_listener:
+  enabled: true
+  ws:
+    url: ${WS_URL}
+    auth_token: ${WS_AUTH_TOKEN:}
+    accounts:
+      - ${ACCOUNT_INDEX}
 
 # Capture (optional - can disable for production)
 capture:

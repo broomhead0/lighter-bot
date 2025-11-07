@@ -63,6 +63,11 @@ try:
 except Exception:  # noqa
     SelfTradeGuard = None  # type: ignore
 
+try:
+    from modules.account_listener import AccountListener
+except Exception:  # noqa
+    AccountListener = None  # type: ignore
+
 from modules.alert_manager import AlertManager
 from modules.telemetry import Telemetry
 
@@ -679,6 +684,26 @@ async def main():
             ],
         )
 
+    account_listener = None
+    if AccountListener:
+        acct_cfg = cfg.get("account_listener") or {}
+        enabled = bool(acct_cfg.get("enabled", True))
+        if enabled:
+            merged_cfg = dict(acct_cfg)
+            merged_cfg.setdefault("api", cfg.get("api") or {})
+            try:
+                account_listener = AccountListener(
+                    config=merged_cfg,
+                    state=state,
+                    hedger=None,
+                    telemetry=telemetry,
+                )
+                logging.getLogger("main").info("[main] AccountListener initialized")
+            except Exception as exc:
+                logging.getLogger("main").warning(
+                    "[main] AccountListener init failed: %s", exc
+                )
+
     # Data source -> adapter
     raw_ds = None
     if MockMetricsProvider:
@@ -832,6 +857,12 @@ async def main():
         tasks.append(asyncio.create_task(run_component("selector", selector)))
     if maker:
         tasks.append(asyncio.create_task(run_component("maker", maker)))
+    if account_listener:
+        tasks.append(
+            asyncio.create_task(
+                run_component("account_listener", account_listener)
+            )
+        )
 
     # --- Watchdogs (M7) ---
     wd_cfg = cfg.get("watchdogs") or {}

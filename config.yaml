@@ -86,3 +86,10 @@ ws:
     - "market_stats/all"
   auth_token: ${WS_AUTH_TOKEN:}
   log_mid_interval_s: 1.0
+account_listener:
+  enabled: true
+  ws:
+    url: wss://mainnet.zklighter.elliot.ai/stream
+    auth_token: ${WS_AUTH_TOKEN:}
+    accounts:
+      - ${ACCOUNT_INDEX:}
