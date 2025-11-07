@@ -45,12 +45,11 @@ optimizer:
 guard:
   price_band_bps: 50
   crossed_book_protection: true
-  max_inventory_notional: 35
-  max_position_units: 0.21
+  max_inventory_notional: 50
+  max_position_units: 0.25
   kill_on_crossed_book: true
   kill_on_inventory_breach: true
   backoff_seconds_on_block: 2
-  max_position_units: 0.21
 
 # Alerts
 alerts:

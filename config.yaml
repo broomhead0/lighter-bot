@@ -73,8 +73,8 @@ watchdogs:
 guard:
   price_band_bps: 50
   crossed_book_protection: true
-  max_position_units: 0.21        # ~3 order fills at 0.07 SOL each
-  max_inventory_notional: 35      # roughly $35 notional cap
+  max_position_units: 0.25        # allow ~0.25 SOL (≈$40) cushion before kill-switch
+  max_inventory_notional: 50      # cap notional exposure around $50
   kill_on_crossed_book: true
   kill_on_inventory_breach: true
   backoff_seconds_on_block: 2
