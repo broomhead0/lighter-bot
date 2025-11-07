@@ -27,7 +27,7 @@ maker:
   size_scale: 1        # Override with instrument-specific scaler (e.g. 1e6)
 hedger:
   enabled: true
-  dry_run: false             # follow maker.dry_run when deploying live
+  dry_run: true              # run dry until premium fees are justified
   market: market:2
   trigger_units: 0.18        # start hedging once exposure exceeds ~0.18 SOL
   trigger_notional: 30       # optional notional trigger (~$30)
@@ -38,6 +38,11 @@ hedger:
   cooldown_seconds: 5.0
   max_attempts: 3
   retry_backoff_seconds: 2.0
+fees:
+  maker_actual_rate: 0.0          # standard tier (no maker fees)
+  taker_actual_rate: 0.0          # standard tier (no taker fees)
+  maker_premium_rate: 0.00002     # 0.002% maker fee in premium tier
+  taker_premium_rate: 0.0002      # 0.02% taker fee in premium tier
 optimizer:
   hysteresis_score_margin: 0.05
   max_spread_bps: 25

@@ -194,6 +194,10 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
         (("hedger", "max_attempts"), "HEDGER_MAX_ATTEMPTS", "int"),
         (("hedger", "retry_backoff_seconds"), "HEDGER_RETRY_BACKOFF_SECONDS", "float"),
         (("hedger", "trigger_notional"), "HEDGER_TRIGGER_NOTIONAL", "float"),
+        (("fees", "maker_actual_rate"), "FEES_MAKER_ACTUAL_RATE", "float"),
+        (("fees", "taker_actual_rate"), "FEES_TAKER_ACTUAL_RATE", "float"),
+        (("fees", "maker_premium_rate"), "FEES_MAKER_PREMIUM_RATE", "float"),
+        (("fees", "taker_premium_rate"), "FEES_TAKER_PREMIUM_RATE", "float"),
         (("alerts", "enabled"), "ALERTS_ENABLED", "bool"),
         (("alerts", "discord_webhook_url"), "DISCORD_WEBHOOK", "str"),
         (("telemetry", "enabled"), "TELEMETRY_ENABLED", "bool"),
@@ -844,6 +848,13 @@ async def main():
     async def periodic_core_metrics():
         while not stop_event.is_set():
             telemetry.set_gauge("uptime_seconds", max(0.0, time.time() - start_ts))
+            if state and hasattr(state, "get_fee_stats"):
+                try:
+                    stats = state.get_fee_stats()
+                    for key, value in stats.items():
+                        telemetry.set_gauge(f"fees_{key}", float(value))
+                except Exception as exc:
+                    logging.getLogger("telemetry").debug("fee stats update failed: %s", exc)
             await asyncio.sleep(5.0)
 
     tasks.append(asyncio.create_task(periodic_core_metrics(), name="metrics"))

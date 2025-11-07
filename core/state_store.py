@@ -25,11 +25,30 @@ class StateStore:
         self._active_pairs: List[str] = []
         self._pair_metrics: Dict[str, PairMetrics] = {}
 
+        # Account info
+        self._account_index: Optional[str] = None
+
         # Inventory tracking (per-market position in base units)
         self._inventory: Dict[str, Decimal] = {}  # market_id -> position
 
         # Order tracking
         self._open_orders: Dict[str, Dict[str, Any]] = {}  # order_id -> order info
+
+        # Fee & volume stats
+        self._volume_stats = {
+            "maker_notional": Decimal("0"),
+            "taker_notional": Decimal("0"),
+            "maker_fee_actual": Decimal("0"),
+            "maker_fee_premium": Decimal("0"),
+            "taker_fee_actual": Decimal("0"),
+            "taker_fee_premium": Decimal("0"),
+            "hedger_notional": Decimal("0"),
+            "hedger_fee_premium": Decimal("0"),
+        }
+        self._fill_counts = {
+            "maker": 0,
+            "taker": 0,
+        }
 
     # -------- Mids ----------
     def set_mid(self, market_id: str, price: float) -> None:
@@ -63,6 +82,13 @@ class StateStore:
 
     def get_pair_metrics(self) -> Dict[str, PairMetrics]:
         return dict(self._pair_metrics)
+
+    # -------- Account ----------
+    def set_account_index(self, account_index: Optional[str]) -> None:
+        self._account_index = str(account_index) if account_index is not None else None
+
+    def get_account_index(self) -> Optional[str]:
+        return self._account_index
 
     # -------- Inventory ----------
     def get_inventory(self, market_id: Optional[str] = None) -> Union[Decimal, Dict[str, Decimal]]:
@@ -99,6 +125,38 @@ class StateStore:
             for oid, info in self._open_orders.items()
             if info.get("market") == market_id
         }
+
+    # -------- Fee & volume stats ----------
+    def record_volume_sample(
+        self,
+        role: str,
+        notional: Decimal,
+        fee_actual: Decimal,
+        fee_premium: Decimal,
+    ) -> None:
+        role_key = role.lower()
+        if role_key == "maker":
+            self._volume_stats["maker_notional"] += Decimal(str(notional))
+            self._volume_stats["maker_fee_actual"] += Decimal(str(fee_actual))
+            self._volume_stats["maker_fee_premium"] += Decimal(str(fee_premium))
+            self._fill_counts["maker"] += 1
+        elif role_key == "taker":
+            self._volume_stats["taker_notional"] += Decimal(str(notional))
+            self._volume_stats["taker_fee_actual"] += Decimal(str(fee_actual))
+            self._volume_stats["taker_fee_premium"] += Decimal(str(fee_premium))
+            self._fill_counts["taker"] += 1
+
+    def record_hedger_simulation(self, notional: Decimal, fee_premium: Decimal) -> None:
+        self._volume_stats["hedger_notional"] += Decimal(str(notional))
+        self._volume_stats["hedger_fee_premium"] += Decimal(str(fee_premium))
+
+    def get_fee_stats(self) -> Dict[str, float]:
+        out: Dict[str, float] = {}
+        for key, value in self._volume_stats.items():
+            out[key] = float(value)
+        out["maker_fill_count"] = float(self._fill_counts["maker"])
+        out["taker_fill_count"] = float(self._fill_counts["taker"])
+        return out
 
     # -------- Time ----------
     def now(self) -> float:

@@ -25,6 +25,7 @@ class FillRecord:
     size: Decimal
     price: Decimal
     timestamp: float
+    role: str
     raw: Dict[str, Any]
 
 
@@ -74,6 +75,21 @@ class AccountListener:
             self.market_filter = [default_market]
         else:
             self.market_filter = []
+
+        api_cfg = self.cfg.get("api", {}) if isinstance(self.cfg.get("api"), dict) else {}
+        acct_idx = api_cfg.get("account_index")
+        self.account_index = str(acct_idx) if acct_idx is not None else None
+        if hasattr(self.state, "set_account_index"):
+            try:
+                self.state.set_account_index(self.account_index)
+            except Exception:
+                pass
+
+        fees_cfg = self.cfg.get("fees") if isinstance(self.cfg.get("fees"), dict) else {}
+        self.maker_fee_actual = Decimal(str(fees_cfg.get("maker_actual_rate", 0)))
+        self.taker_fee_actual = Decimal(str(fees_cfg.get("taker_actual_rate", 0)))
+        self.maker_fee_premium = Decimal(str(fees_cfg.get("maker_premium_rate", 0.00002)))
+        self.taker_fee_premium = Decimal(str(fees_cfg.get("taker_premium_rate", 0.0002)))
 
         self._stop = asyncio.Event()
         self._spawned = False
@@ -194,6 +210,22 @@ class AccountListener:
         side = entry.get("side") or entry.get("trade_type")
         ts = float(entry.get("timestamp") or time.time())
 
+        account_id = self.account_index
+        role = "maker"
+        if account_id is not None:
+            ask_id = entry.get("ask_account_id")
+            bid_id = entry.get("bid_account_id")
+            maker_is_ask = bool(entry.get("is_maker_ask"))
+            maker_id = str(ask_id) if maker_is_ask else str(bid_id)
+            taker_id = str(bid_id) if maker_is_ask else str(ask_id)
+            acct_str = str(account_id)
+            if acct_str == maker_id:
+                role = "maker"
+            elif acct_str == taker_id:
+                role = "taker"
+            else:
+                return
+
         try:
             size_dec = Decimal(str(size))
             price_dec = Decimal(str(price))
@@ -207,6 +239,7 @@ class AccountListener:
             size=size_dec,
             price=price_dec,
             timestamp=ts,
+            role=role,
             raw=entry,
         )
         self._fills.append(fill)
@@ -249,8 +282,24 @@ class AccountListener:
                 self.state.update_inventory(fill.market, quantity)
             except Exception as exc:
                 LOG.debug("[account] state.update_inventory failed: %s", exc)
-        if self.state and hasattr(self.state, "set_inventory"):
-            pass
+
+        if hasattr(self.state, "record_volume_sample"):
+            notional = fill.size * fill.price
+            if fill.role == "maker":
+                fee_actual = notional * self.maker_fee_actual
+                fee_premium = notional * self.maker_fee_premium
+            else:
+                fee_actual = notional * self.taker_fee_actual
+                fee_premium = notional * self.taker_fee_premium
+            try:
+                self.state.record_volume_sample(
+                    role=fill.role,
+                    notional=notional,
+                    fee_actual=fee_actual,
+                    fee_premium=fee_premium,
+                )
+            except Exception as exc:
+                LOG.debug("[account] record_volume_sample failed: %s", exc)
 
     def _handle_position_entry(self, market_id: str, entry: Dict[str, Any]) -> None:
         market = f"market:{market_id}"

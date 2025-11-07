@@ -65,7 +65,17 @@ class Hedger:
         self.cooldown_seconds = float(hedger_cfg.get("cooldown_seconds", 5.0))
         self.max_attempts = int(hedger_cfg.get("max_attempts", 3))
         self.retry_backoff_s = float(hedger_cfg.get("retry_backoff_seconds", 2.0))
+        fees_cfg = self.cfg.get("fees") if isinstance(self.cfg.get("fees"), dict) else {}
+        self.taker_fee_actual = Decimal(str(fees_cfg.get("taker_actual_rate", 0)))
+        self.taker_fee_premium = Decimal(str(fees_cfg.get("taker_premium_rate", 0.0002)))
+
         self.dry_run = bool(hedger_cfg.get("dry_run", maker_cfg.get("dry_run", True)))
+
+        # If taker fees are zero (standard tier), force dry-run to avoid accidental cost.
+        if self.taker_fee_actual == Decimal("0"):
+            if not self.dry_run:
+                LOG.info("[hedger] forcing dry-run mode while taker fees are zero-tier")
+            self.dry_run = True
 
         api_cfg = self.cfg.get("api") or {}
         trading_cfg = self._build_trading_config(api_cfg, maker_cfg)
@@ -198,7 +208,25 @@ class Hedger:
         return mid + offset
 
     async def _execute_hedge(self, side: str, size: float, price: float) -> bool:
-        LOG.info("[hedger] hedging %s %.6f at %.4f (dry_run=%s)", side, size, price, self.dry_run)
+        notional = Decimal(str(size)) * Decimal(str(price))
+        fee_actual = notional * self.taker_fee_actual
+        fee_premium = notional * self.taker_fee_premium
+
+        LOG.info(
+            "[hedger] hedging %s %.6f at %.4f (dry_run=%s) notional=%.6f est_fee_premium=%.8f",
+            side,
+            size,
+            price,
+            self.dry_run,
+            notional,
+            fee_premium,
+        )
+
+        if hasattr(self.state, "record_hedger_simulation"):
+            try:
+                self.state.record_hedger_simulation(notional=notional, fee_premium=fee_premium)
+            except Exception:
+                pass
 
         if self.dry_run:
             return True
@@ -226,11 +254,13 @@ class Hedger:
                     time_in_force=tif_ioc,
                 )
                 LOG.info(
-                    "[hedger] submitted hedge order idx=%s size=%.6f price=%.4f tx=%s",
+                    "[hedger] submitted hedge order idx=%s size=%.6f price=%.4f tx=%s premium_fee_est=%.8f actual_fee_est=%.8f",
                     order.client_order_index,
                     size,
                     price,
                     order.tx_hash,
+                    fee_premium,
+                    fee_actual,
                 )
                 return True
             except Exception as exc:

@@ -28,7 +28,7 @@ maker:
     max_latency_ms: 2000
 hedger:
   enabled: true
-  dry_run: false
+  dry_run: true
   market: "market:1"
   trigger_units: 0.18
   trigger_notional: 30
@@ -39,6 +39,11 @@ hedger:
   cooldown_seconds: 5.0
   max_attempts: 3
   retry_backoff_seconds: 2.0
+fees:
+  maker_actual_rate: 0.0
+  taker_actual_rate: 0.0
+  maker_premium_rate: 0.00002
+  taker_premium_rate: 0.0002
 
 # Optimizer
 optimizer:
