@@ -117,7 +117,23 @@ class AccountListener:
                     raw_msg = await asyncio.wait_for(ws.recv(), timeout=60)  # type: ignore
                     if isinstance(raw_msg, (bytes, bytearray)):
                         raw_msg = raw_msg.decode("utf-8", "ignore")
-                    self._handle_frame(raw_msg)
+                    obj = self._parse_raw(raw_msg)
+                    if obj is None:
+                        continue
+
+                    msg_type = obj.get("type")
+                    if msg_type == "ping":
+                        try:
+                            await ws.send(json.dumps({"type": "pong"}))
+                            LOG.debug("[account] sent pong response")
+                        except Exception as exc:
+                            LOG.debug("[account] failed to send pong: %s", exc)
+                        continue
+                    if msg_type == "connected":
+                        await self._subscribe(ws)
+                        continue
+
+                    self._handle_obj(obj)
                 except asyncio.TimeoutError:
                     LOG.debug("[account] idle ping")
                     continue
@@ -130,20 +146,15 @@ class AccountListener:
             await ws.send(json.dumps(payload))
             LOG.info("[account] subscribed to account_all/%s", acct)
 
-    # ---------------------------------------------------------------- frame handling
-    def _handle_frame(self, raw: str) -> None:
+    def _parse_raw(self, raw: str) -> Optional[Dict[str, Any]]:
         try:
-            obj = json.loads(raw) if raw else {}
+            return json.loads(raw) if raw else {}
         except Exception:
             LOG.debug("[account] invalid JSON frame: %s", raw)
-            return
+            return None
 
-        msg_type = obj.get("type")
-        if msg_type == "ping":
-            return
-        if msg_type == "connected":
-            return
-
+    # ---------------------------------------------------------------- frame handling
+    def _handle_obj(self, obj: Dict[str, Any]) -> None:
         channel = obj.get("channel", "")
         if isinstance(channel, str) and channel.startswith("account_all:"):
             self._handle_account_all(obj)
