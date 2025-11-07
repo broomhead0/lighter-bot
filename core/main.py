@@ -193,6 +193,7 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
         (("hedger", "cooldown_seconds"), "HEDGER_COOLDOWN_SECONDS", "float"),
         (("hedger", "max_attempts"), "HEDGER_MAX_ATTEMPTS", "int"),
         (("hedger", "retry_backoff_seconds"), "HEDGER_RETRY_BACKOFF_SECONDS", "float"),
+        (("hedger", "trigger_notional"), "HEDGER_TRIGGER_NOTIONAL", "float"),
         (("alerts", "enabled"), "ALERTS_ENABLED", "bool"),
         (("alerts", "discord_webhook_url"), "DISCORD_WEBHOOK", "str"),
         (("telemetry", "enabled"), "TELEMETRY_ENABLED", "bool"),

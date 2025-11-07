@@ -29,21 +29,36 @@ class Hedger:
         self.telemetry = telemetry
         self.alerts = alert_manager
 
-        hedger_cfg = (self.cfg.get("hedger") or {}) if isinstance(self.cfg.get("hedger"), dict) else {}
-        maker_cfg = (self.cfg.get("maker") or {}) if isinstance(self.cfg.get("maker"), dict) else {}
+        hedger_cfg = (
+            self.cfg.get("hedger") or {}
+            if isinstance(self.cfg.get("hedger"), dict)
+            else {}
+        )
+        maker_cfg = (
+            self.cfg.get("maker") or {}
+            if isinstance(self.cfg.get("maker"), dict)
+            else {}
+        )
 
         self.enabled = bool(hedger_cfg.get("enabled", False))
-        self.market = hedger_cfg.get("market") or maker_cfg.get("pair") or "market:1"
-        self.trigger_units = Decimal(str(hedger_cfg.get("trigger_units", 0.05)))
-        self.trigger_notional = Decimal(str(hedger_cfg.get("trigger_notional", 0))) if hedger_cfg.get("trigger_notional") is not None else None
+        self.market = (
+            hedger_cfg.get("market") or maker_cfg.get("pair") or "market:1"
+        )
+        self.trigger_units = Decimal(
+            str(hedger_cfg.get("trigger_units", 0.05))
+        )
+        if (
+            hedger_cfg.get("trigger_notional") is not None
+            and hedger_cfg.get("trigger_notional") != "none"
+        ):
+            self.trigger_notional: Optional[Decimal] = Decimal(
+                str(hedger_cfg.get("trigger_notional", 0))
+            )
+        else:
+            self.trigger_notional = None
         self.target_units = Decimal(str(hedger_cfg.get("target_units", 0)))
         self.max_clip_units = Decimal(
-            str(
-                hedger_cfg.get(
-                    "max_clip_units",
-                    maker_cfg.get("size", 0.05),
-                )
-            )
+            str(hedger_cfg.get("max_clip_units", maker_cfg.get("size", 0.05)))
         )
         self.price_offset_bps = float(hedger_cfg.get("price_offset_bps", 8.0))
         self.poll_interval_s = float(hedger_cfg.get("poll_interval_seconds", 1.5))
