@@ -3,8 +3,11 @@ alerts:
   enabled: true
 api:
   base_url: http://127.0.0.1:8787
-  key: ''
-  secret: ''
+  key: ''              # API key private key (hex string) – required for live trading
+  account_index: null  # Set when live trading
+  api_key_index: null  # Set when live trading
+  max_api_key_index: null
+  nonce_management: null
 app:
   log_level: INFO
   name: lighter-bot
@@ -20,6 +23,8 @@ maker:
   pair: market:1
   size: 0.001
   spread_bps: 10
+  price_scale: 1       # Override with instrument-specific scaler (e.g. 100)
+  size_scale: 1        # Override with instrument-specific scaler (e.g. 1e6)
 optimizer:
   hysteresis_score_margin: 0.05
   max_spread_bps: 25

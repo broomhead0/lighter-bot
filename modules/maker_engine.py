@@ -7,6 +7,8 @@ import time
 from decimal import Decimal
 from typing import Any, Dict, Optional, Tuple
 
+from core.trading_client import TradingClient, TradingConfig
+
 LOG = logging.getLogger("maker")
 
 
@@ -60,24 +62,17 @@ class MakerEngine:
 
         # Order tracking
         self._open_orders: Dict[str, Dict[str, Any]] = {}  # order_id -> order info
-        self._last_order_id = 0
 
-        # REST client for order placement
-        self._rest_client = None
+        # Trading client (Signer-based) for live order placement
+        self._trading_client: Optional[TradingClient] = None
         api_cfg = self.cfg.get("api") or {}
-        if api_cfg.get("base_url") and api_cfg.get("key"):
+        trading_cfg = self._build_trading_config(api_cfg)
+        if trading_cfg:
             try:
-                from core.rest_client import RestClient, RestConfig
-                self._rest_client = RestClient(
-                    RestConfig(
-                        base_url=api_cfg.get("base_url", ""),
-                        api_key=api_cfg.get("key"),
-                        api_secret=api_cfg.get("secret"),
-                    )
-                )
-                LOG.info("[maker] REST client initialized for order placement")
-            except Exception as e:
-                LOG.warning(f"[maker] Failed to init REST client: {e}")
+                self._trading_client = TradingClient(trading_cfg)
+                LOG.info("[maker] trading client ready for live orders")
+            except Exception as exc:
+                LOG.warning("[maker] trading client unavailable: %s", exc)
 
         self._stop = asyncio.Event()
 
@@ -140,6 +135,11 @@ class MakerEngine:
 
     async def stop(self):
         self._stop.set()
+        if self._trading_client:
+            try:
+                await self._trading_client.close()
+            except Exception as exc:
+                LOG.debug("[maker] trading client close failed: %s", exc)
 
     # ----------------------- Helpers --------------------------
 
@@ -184,7 +184,7 @@ class MakerEngine:
         await self._cancel_all_orders()
 
         # Place new orders if REST client available
-        if self._rest_client and not self.cfg.get("maker", {}).get("dry_run", True):
+        if self._trading_client and not self.cfg.get("maker", {}).get("dry_run", True):
             try:
                 await self._place_order("bid", bid, size)
                 await self._place_order("ask", ask, size)
@@ -257,7 +257,7 @@ class MakerEngine:
             return
 
         cancel_count = len(self._open_orders)
-        if self._rest_client and not self.cfg.get("maker", {}).get("dry_run", True):
+        if self._trading_client and not self.cfg.get("maker", {}).get("dry_run", True):
             try:
                 for order_id, order_info in list(self._open_orders.items()):
                     await self._cancel_order(order_id)
@@ -273,13 +273,18 @@ class MakerEngine:
 
     async def _place_order(self, side: str, price: float, size: float) -> Optional[str]:
         """Place a post-only limit order. Returns order_id if successful."""
-        if not self._rest_client:
+        if not self._trading_client:
             return None
 
-        # TODO: Implement actual REST API call when endpoint is available
-        # For now, generate a fake order_id for tracking
-        self._last_order_id += 1
-        order_id = f"order_{self._last_order_id}"
+        await self._trading_client.ensure_ready()
+        order = await self._trading_client.create_post_only_limit(
+            market=self.market,
+            side=side,
+            price=price,
+            size=size,
+        )
+
+        order_id = str(order.client_order_index)
 
         self._open_orders[order_id] = {
             "side": side,
@@ -289,15 +294,57 @@ class MakerEngine:
             "timestamp": time.time(),
         }
 
-        LOG.debug(f"[maker] placed {side} order {order_id}: {size}@{price}")
+        LOG.info(
+            "[maker] submitted %s order id=%s size=%.6f price=%.4f tx=%s",
+            side,
+            order_id,
+            size,
+            price,
+            order.tx_hash,
+        )
         return order_id
 
     async def _cancel_order(self, order_id: str):
         """Cancel a specific order."""
-        if not self._rest_client:
+        if not self._trading_client:
             return
 
-        # TODO: Implement actual REST API call when endpoint is available
+        await self._trading_client.ensure_ready()
+        await self._trading_client.cancel_order(
+            market=self.market,
+            client_order_index=int(order_id),
+        )
+
         if order_id in self._open_orders:
             del self._open_orders[order_id]
-            LOG.debug(f"[maker] cancelled order {order_id}")
+        LOG.info("[maker] cancelled order %s", order_id)
+
+    def _build_trading_config(self, api_cfg: Dict[str, Any]) -> Optional[TradingConfig]:
+        base_url = api_cfg.get("base_url")
+        private_key = api_cfg.get("private_key") or api_cfg.get("key")
+        account_index = api_cfg.get("account_index")
+        api_key_index = api_cfg.get("api_key_index")
+
+        if not (base_url and private_key is not None and account_index is not None and api_key_index is not None):
+            return None
+
+        maker_cfg = self.cfg.get("maker") or {}
+        base_scale = Decimal(str(maker_cfg.get("size_scale", 1)))
+        price_scale = Decimal(str(maker_cfg.get("price_scale", 1)))
+
+        try:
+            return TradingConfig(
+                base_url=str(base_url),
+                api_key_private_key=str(private_key),
+                account_index=int(account_index),
+                api_key_index=int(api_key_index),
+                base_scale=base_scale,
+                price_scale=price_scale,
+                max_api_key_index=(
+                    int(api_cfg["max_api_key_index"]) if api_cfg.get("max_api_key_index") is not None else None
+                ),
+                nonce_management=api_cfg.get("nonce_management"),
+            )
+        except Exception as exc:
+            LOG.warning("[maker] invalid trading config: %s", exc)
+            return None
