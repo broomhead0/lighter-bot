@@ -40,7 +40,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
 
@@ -161,8 +161,8 @@ class TradingClient:
         tx, tx_hash, err = await signer.create_order(
             market_index=market_index,
             client_order_index=client_order_index,
-            base_amount=int(base_units),
-            price=int(price_units),
+            base_amount=base_units,
+            price=price_units,
             is_ask=side.lower() == "ask",
             order_type=SignerClient.ORDER_TYPE_LIMIT,
             time_in_force=SignerClient.ORDER_TIME_IN_FORCE_POST_ONLY,
@@ -230,10 +230,14 @@ class TradingClient:
         except ValueError as exc:
             raise ValueError(f"invalid market index: {market}") from exc
 
-    def _scale_value(self, raw_value: float, scale: Decimal, label: str) -> Decimal:
+    def _scale_value(self, raw_value: float, scale: Decimal, label: str) -> int:
         if scale <= 0:
             raise ValueError(f"{label} scale must be positive (got {scale})")
-        return Decimal(str(raw_value)) * scale
+        scaled = Decimal(str(raw_value)) * scale
+        integral = scaled.to_integral_value(rounding=ROUND_HALF_UP)
+        if integral <= 0:
+            raise ValueError(f"{label} scales to non-positive integer ({integral})")
+        return int(integral)
 
     def _resolve_expiry(self, override: Optional[int]) -> int:
         if override is not None:
