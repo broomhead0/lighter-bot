@@ -43,9 +43,14 @@ optimizer:
 
 # Self-Trade Guard
 guard:
-  max_inventory_notional: 250
-  block_crossed_book: true
-  max_quote_width_bps: 50
+  price_band_bps: 50
+  crossed_book_protection: true
+  max_inventory_notional: 35
+  max_position_units: 0.21
+  kill_on_crossed_book: true
+  kill_on_inventory_breach: true
+  backoff_seconds_on_block: 2
+  max_position_units: 0.21
 
 # Alerts
 alerts:
