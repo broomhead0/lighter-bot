@@ -46,6 +46,8 @@ class AccountListener:
         self.hedger = hedger
         self.telemetry = telemetry
         self.debug = bool(self.cfg.get("debug", False))
+        if self.debug:
+            LOG.setLevel(logging.DEBUG)
 
         ws_cfg = self.cfg.get("ws", {}) if isinstance(self.cfg.get("ws"), dict) else {}
         self.ws_url = ws_cfg.get("url") or "wss://mainnet.zklighter.elliot.ai/stream"
