@@ -313,7 +313,7 @@ class MarketDataListener:
 
         if self.state and hasattr(self.state, "update_mid"):
             try:
-                self.state.update_mid(formatted_market, float(mid), ts)
+                self.state.update_mid(formatted_market, float(mid))
             except Exception as e:
                 LOG.debug("[listener] state.update_mid failed: %s", e)
                 return False
