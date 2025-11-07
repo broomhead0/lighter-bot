@@ -169,8 +169,12 @@ class AccountListener:
     def _handle_account_all(self, obj: Dict[str, Any]) -> None:
         trades = obj.get("trades")
         if isinstance(trades, dict):
-            for trade_id, entry in trades.items():
-                self._handle_trade_entry(entry)
+            for _trade_id, entry in trades.items():
+                if isinstance(entry, list):
+                    for sub_entry in entry:
+                        self._handle_trade_entry(sub_entry)
+                else:
+                    self._handle_trade_entry(entry)
         positions = obj.get("positions")
         if isinstance(positions, dict):
             for market_id, entry in positions.items():
