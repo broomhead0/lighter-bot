@@ -52,6 +52,7 @@ class MakerEngine:
         self.randomize_bps = float(
             maker_cfg.get("randomize_bps", 4.0)
         )  # random widen/narrow
+        self.allow_synthetic_fallback = bool(maker_cfg.get("synthetic_fallback", False))
 
         # Cancel discipline tracking
         limits_cfg = maker_cfg.get("limits") or {}
@@ -152,8 +153,9 @@ class MakerEngine:
                     return float(m)
         except Exception:
             pass
-        # Fallback: synthetic drifting mid so we can demonstrate quotes even without WS
-        return self._synthetic_mid()
+        if self.allow_synthetic_fallback:
+            return self._synthetic_mid()
+        return None
 
     def _compute_quotes(self, mid: float) -> Tuple[float, float, float]:
         jitter = random.uniform(-self.randomize_bps, self.randomize_bps)
