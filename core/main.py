@@ -68,6 +68,11 @@ try:
 except Exception:  # noqa
     AccountListener = None  # type: ignore
 
+try:
+    from modules.hedger import Hedger
+except Exception:  # noqa
+    Hedger = None  # type: ignore
+
 from modules.alert_manager import AlertManager
 from modules.telemetry import Telemetry
 
@@ -176,6 +181,18 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
         (("maker", "size_scale"), "MAKER_SIZE_SCALE", "float"),
         (("maker", "limits", "max_cancels"), "MAKER_LIMITS_MAX_CANCELS", "int"),
         (("maker", "limits", "max_latency_ms"), "MAKER_LIMITS_MAX_LATENCY_MS", "int"),
+        (("hedger", "enabled"), "HEDGER_ENABLED", "bool"),
+        (("hedger", "dry_run"), "HEDGER_DRY_RUN", "bool"),
+        (("hedger", "market"), "HEDGER_MARKET", "str"),
+        (("hedger", "trigger_units"), "HEDGER_TRIGGER_UNITS", "float"),
+        (("hedger", "trigger_notional"), "HEDGER_TRIGGER_NOTIONAL", "float"),
+        (("hedger", "target_units"), "HEDGER_TARGET_UNITS", "float"),
+        (("hedger", "max_clip_units"), "HEDGER_MAX_CLIP_UNITS", "float"),
+        (("hedger", "price_offset_bps"), "HEDGER_PRICE_OFFSET_BPS", "float"),
+        (("hedger", "poll_interval_seconds"), "HEDGER_POLL_INTERVAL_SECONDS", "float"),
+        (("hedger", "cooldown_seconds"), "HEDGER_COOLDOWN_SECONDS", "float"),
+        (("hedger", "max_attempts"), "HEDGER_MAX_ATTEMPTS", "int"),
+        (("hedger", "retry_backoff_seconds"), "HEDGER_RETRY_BACKOFF_SECONDS", "float"),
         (("alerts", "enabled"), "ALERTS_ENABLED", "bool"),
         (("alerts", "discord_webhook_url"), "DISCORD_WEBHOOK", "str"),
         (("telemetry", "enabled"), "TELEMETRY_ENABLED", "bool"),
@@ -684,6 +701,21 @@ async def main():
             ],
         )
 
+    hedger = None
+    if Hedger:
+        hedger_cfg = cfg.get("hedger") or {}
+        if bool(hedger_cfg.get("enabled", False)):
+            try:
+                hedger = Hedger(
+                    config=cfg,
+                    state=state,
+                    telemetry=telemetry,
+                    alert_manager=alert_mgr,
+                )
+                logging.getLogger("main").info("[main] Hedger initialized")
+            except Exception as exc:
+                logging.getLogger("main").warning("[main] Hedger init failed: %s", exc)
+
     account_listener = None
     if AccountListener:
         acct_cfg = cfg.get("account_listener") or {}
@@ -691,11 +723,12 @@ async def main():
         if enabled:
             merged_cfg = dict(acct_cfg)
             merged_cfg.setdefault("api", cfg.get("api") or {})
+            merged_cfg.setdefault("ws", cfg.get("ws") or {})
             try:
                 account_listener = AccountListener(
                     config=merged_cfg,
                     state=state,
-                    hedger=None,
+                    hedger=hedger,
                     telemetry=telemetry,
                 )
                 logging.getLogger("main").info("[main] AccountListener initialized")
@@ -857,6 +890,8 @@ async def main():
         tasks.append(asyncio.create_task(run_component("selector", selector)))
     if maker:
         tasks.append(asyncio.create_task(run_component("maker", maker)))
+    if hedger:
+        tasks.append(asyncio.create_task(run_component("hedger", hedger)))
     if account_listener:
         tasks.append(
             asyncio.create_task(

@@ -30,11 +30,16 @@
 ### Configuration additions
 ```yaml
 hedger:
-  enabled: false
+  enabled: true
   market: market:2
-  trigger_units: 0.05
-  trigger_notional: 10
+  trigger_units: 0.18
+  trigger_notional: 30
+  target_units: 0.04
+  max_clip_units: 0.07
+  price_offset_bps: 10
+  poll_interval_seconds: 1.0
+  cooldown_seconds: 5.0
   max_attempts: 3
-  retry_backoff_s: 2
+  retry_backoff_seconds: 2.0
 ```
 

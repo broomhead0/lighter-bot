@@ -142,30 +142,70 @@ class TradingClient:
         reduce_only: bool = False,
         expiry: Optional[int] = None,
     ) -> PlacedOrder:
+        return await self.create_limit_order(
+            market=market,
+            side=side,
+            price=price,
+            size=size,
+            reduce_only=reduce_only,
+            expiry=expiry,
+            post_only=True,
+        )
+
+    async def create_limit_order(
+        self,
+        market: str,
+        side: str,
+        price: float,
+        size: float,
+        reduce_only: bool = False,
+        expiry: Optional[int] = None,
+        *,
+        post_only: bool = True,
+        time_in_force: Optional[int] = None,
+    ) -> PlacedOrder:
         signer = await self._require_signer()
         market_index = self._parse_market_index(market)
         client_order_index = await self._next_order_index()
 
-        base_units = self._scale_value(size, self.cfg.base_scale, "size")
-        price_units = self._scale_value(price, self.cfg.price_scale, "price")
+        base_units = self._round_scaled_value(size, self.cfg.base_scale, "size")
+        price_units = self._round_scaled_value(price, self.cfg.price_scale, "price")
+
+        base_int = int(base_units)
+        price_int = int(price_units)
+        if base_int <= 0:
+            raise ValueError(f"size scales to non-positive integer ({base_units})")
+        if price_int <= 0:
+            raise ValueError(f"price scales to non-positive integer ({price_units})")
 
         LOG.info(
-            "[trading] submitting %s order: market=%s client_order_index=%s base_units=%s price_units=%s",
+            "[trading] submitting %s order: market=%s client_order_index=%s base_units=%s price_units=%s tif=%s post_only=%s",
             side,
             market,
             client_order_index,
-            base_units,
-            price_units,
+            base_int,
+            price_int,
+            time_in_force if time_in_force is not None else ("POST_ONLY" if post_only else "DEFAULT"),
+            post_only,
         )
+
+        tif = time_in_force
+        if tif is None:
+            assert SignerClient is not None
+            tif = (
+                SignerClient.ORDER_TIME_IN_FORCE_POST_ONLY
+                if post_only
+                else SignerClient.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME
+            )
 
         tx, tx_hash, err = await signer.create_order(
             market_index=market_index,
             client_order_index=client_order_index,
-            base_amount=base_units,
-            price=price_units,
+            base_amount=base_int,
+            price=price_int,
             is_ask=side.lower() == "ask",
             order_type=SignerClient.ORDER_TYPE_LIMIT,
-            time_in_force=SignerClient.ORDER_TIME_IN_FORCE_POST_ONLY,
+            time_in_force=tif,
             reduce_only=reduce_only,
             order_expiry=self._resolve_expiry(expiry),
         )
@@ -230,14 +270,14 @@ class TradingClient:
         except ValueError as exc:
             raise ValueError(f"invalid market index: {market}") from exc
 
-    def _scale_value(self, raw_value: float, scale: Decimal, label: str) -> int:
+    def _scale_value(self, raw_value: float, scale: Decimal, label: str) -> Decimal:
         if scale <= 0:
             raise ValueError(f"{label} scale must be positive (got {scale})")
-        scaled = Decimal(str(raw_value)) * scale
-        integral = scaled.to_integral_value(rounding=ROUND_HALF_UP)
-        if integral <= 0:
-            raise ValueError(f"{label} scales to non-positive integer ({integral})")
-        return int(integral)
+        return Decimal(str(raw_value)) * scale
+
+    def _round_scaled_value(self, raw_value: float, scale: Decimal, label: str) -> Decimal:
+        scaled = self._scale_value(raw_value, scale, label)
+        return scaled.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
     def _resolve_expiry(self, override: Optional[int]) -> int:
         if override is not None:
