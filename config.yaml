@@ -80,3 +80,4 @@ ws:
   channels:
     - "market_stats/all"
   auth_token: ${WS_AUTH_TOKEN:}
+  log_mid_interval_s: 1.0

@@ -59,6 +59,7 @@ class MarketDataListener:
             self.ws_channels = ["market_stats/all"]
 
         self.ws_auth_token = ws_cfg.get("auth_token") or os.environ.get("WS_AUTH_TOKEN")
+        self.ws_mid_log_interval = float(ws_cfg.get("log_mid_interval_s", 1.0))
 
         maker_cfg = self.cfg.get("maker") or {}
         maker_pairs = maker_cfg.get("pairs") or maker_cfg.get("pair")
@@ -78,6 +79,7 @@ class MarketDataListener:
                 LOG.info("[listener] auto-subscribe channels from maker config: %s", derived)
 
         self._ws_subscribed_channels: set[str] = set()
+        self._last_mid_log_ts: float = 0.0
 
         cap_cfg = (
             (self.cfg.get("capture") or {})
@@ -318,7 +320,17 @@ class MarketDataListener:
                 LOG.debug("[listener] state.update_mid failed: %s", e)
                 return False
 
-        LOG.info("[router] mid updated %s -> %.6f", formatted_market, float(mid))
+        should_log = (
+            self.ws_mid_log_interval <= 0
+            or (ts - self._last_mid_log_ts) >= self.ws_mid_log_interval
+            or self._last_mid_log_ts == 0.0
+        )
+
+        if should_log:
+            self._last_mid_log_ts = ts
+            LOG.info("[router] mid updated %s -> %.6f", formatted_market, float(mid))
+        else:
+            LOG.debug("[router] mid updated %s -> %.6f", formatted_market, float(mid))
         return True
 
     def _format_market_id(self, market_id):
