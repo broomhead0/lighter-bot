@@ -198,6 +198,8 @@ class TradingClient:
                 else SignerClient.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME
             )
 
+        expiry_val = self._resolve_expiry(expiry, tif)
+
         tx, tx_hash, err = await signer.create_order(
             market_index=market_index,
             client_order_index=client_order_index,
@@ -207,7 +209,7 @@ class TradingClient:
             order_type=SignerClient.ORDER_TYPE_LIMIT,
             time_in_force=tif,
             reduce_only=reduce_only,
-            order_expiry=self._resolve_expiry(expiry),
+            order_expiry=expiry_val,
         )
 
         if err:
@@ -279,11 +281,14 @@ class TradingClient:
         scaled = self._scale_value(raw_value, scale, label)
         return scaled.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    def _resolve_expiry(self, override: Optional[int]) -> int:
+    def _resolve_expiry(self, override: Optional[int], tif: Optional[int]) -> int:
         if override is not None:
             return int(override)
-        # Default to the SDK's 28-day expiry for post-only limit orders
-        assert SignerClient is not None
+        if SignerClient is None:
+            raise RuntimeError("SignerClient unavailable; cannot resolve expiry")
+        if tif == getattr(SignerClient, "ORDER_TIME_IN_FORCE_IMMEDIATE_OR_CANCEL", None):
+            return 0
+        # Default to the SDK's 28-day expiry for post-only / GTT limit orders
         return SignerClient.DEFAULT_28_DAY_ORDER_EXPIRY
 
 
