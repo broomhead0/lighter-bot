@@ -118,6 +118,8 @@ class AccountListener:
                     raw_msg = await asyncio.wait_for(ws.recv(), timeout=60)  # type: ignore
                     if isinstance(raw_msg, (bytes, bytearray)):
                         raw_msg = raw_msg.decode("utf-8", "ignore")
+                    if self.debug:
+                        LOG.debug("[account] raw: %s", raw_msg)
                     obj = self._parse_raw(raw_msg)
                     if obj is None:
                         continue
