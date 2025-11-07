@@ -26,12 +26,22 @@ LOG_LEVEL = INFO
 WS_URL = wss://mainnet.zklighter.elliot.ai/stream/market_stats:all
 ```
 
-### Optional (if you have them):
+### Optional (NOT needed for initial deployment):
 ```
+# Only add these later when:
+# - API keys: When ready for live trading (after testing)
+# - Discord: When you want notifications
+
 API_KEY = your_lighter_api_key_here
 API_SECRET = your_lighter_api_secret_here
 DISCORD_WEBHOOK = your_discord_webhook_url
 ```
+
+**Note:** You DON'T need these for initial deployment! The bot works fine without them:
+- Bot runs in dry-run mode (no real orders)
+- Alerts just log to console (no Discord needed)
+
+See `API_KEYS_GUIDE.md` for details on when/how to get these.
 
 ## Step 3: Wait for Build
 

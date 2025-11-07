@@ -77,3 +77,5 @@ ws:
   fallback_on_fail: true
   max_failures: 3
   url: wss://mainnet.zklighter.elliot.ai/stream
+  channels:
+    - "market_stats/all"

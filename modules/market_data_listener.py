@@ -49,6 +49,17 @@ class MarketDataListener:
         self.ws_fail_fallback = bool(ws_cfg.get("fallback_on_fail", True))
         self.ws_max_failures = int(ws_cfg.get("max_failures", 3))
 
+        channels_cfg = ws_cfg.get("channels")
+        if isinstance(channels_cfg, list) and channels_cfg:
+            self.ws_channels = [str(ch) for ch in channels_cfg]
+        elif isinstance(channels_cfg, str) and channels_cfg.strip():
+            self.ws_channels = [channels_cfg.strip()]
+        else:
+            # default: subscribe to all market stats
+            self.ws_channels = ["market_stats/all"]
+
+        self._ws_subscribed_channels: set[str] = set()
+
         cap_cfg = (
             (self.cfg.get("capture") or {})
             if isinstance(self.cfg.get("capture"), dict)
@@ -134,38 +145,47 @@ class MarketDataListener:
     async def _run_ws_once(self):
         assert websockets is not None  # guarded by caller
         LOG.info("[listener] connecting %s", self.ws_url)
-        # Disable automatic ping/pong - Lighter server may handle it differently
         async with websockets.connect(
-            self.ws_url, 
-            ping_interval=None,  # Disable automatic ping
+            self.ws_url,
+            ping_interval=None,
             ping_timeout=None,
-            close_timeout=10
+            close_timeout=10,
         ) as ws:  # type: ignore
             await self._alert("info", "WS connected", self.ws_url)
-
-            # Try to subscribe to market_stats channel
-            # Lighter WebSocket may require subscription message
-            try:
-                subscribe_msg = json.dumps({
-                    "type": "subscribe",
-                    "channel": "market_stats:all"
-                })
-                await ws.send(subscribe_msg)
-                LOG.info("[listener] sent subscription: market_stats:all")
-            except Exception as e:
-                LOG.debug("[listener] subscription attempt failed (may not be required): %s", e)
+            self._ws_subscribed_channels.clear()
+            await self._send_ws_subscriptions(ws)
 
             while not self._stop.is_set():
                 try:
-                    msg = await asyncio.wait_for(ws.recv(), timeout=60)  # type: ignore
+                    raw_msg = await asyncio.wait_for(ws.recv(), timeout=60)  # type: ignore
                     ts = time.time()
-                    LOG.debug("[listener] received message: %s", msg[:200] if len(msg) > 200 else msg)
+                    if isinstance(raw_msg, (bytes, bytearray)):
+                        raw_msg = raw_msg.decode("utf-8", "ignore")
+                    LOG.debug("[listener] received message: %s", raw_msg[:200] if len(raw_msg) > 200 else raw_msg)
                     self._touch_ws()
-                    self._capture_raw(msg, ts)
-                    self._route_frame(msg, ts)
+                    self._capture_raw(raw_msg, ts)
+
+                    try:
+                        obj = json.loads(raw_msg) if raw_msg else {}
+                    except Exception:
+                        LOG.debug("[listener] unable to parse frame as JSON")
+                        continue
+
+                    msg_type = obj.get("type")
+                    if msg_type == "connected":
+                        await self._send_ws_subscriptions(ws)
+                        continue
+                    if msg_type == "ping":
+                        try:
+                            await ws.send(json.dumps({"type": "pong"}))
+                            LOG.debug("[listener] sent pong response")
+                        except Exception as e:
+                            LOG.debug("[listener] failed to send pong: %s", e)
+                        continue
+
+                    self._route_frame_obj(obj, ts)
                 except asyncio.TimeoutError:
                     LOG.warning("[listener] no message received in 60s, connection may be idle")
-                    # Touch to keep connection alive
                     self._touch_ws()
                     continue
 
@@ -214,27 +234,91 @@ class MarketDataListener:
 
     def _route_frame(self, raw: str, ts: float):
         try:
-            obj = json.loads(raw)
+            obj = json.loads(raw) if raw else {}
         except Exception:
             LOG.debug("[listener] non-json frame")
             return
+        self._route_frame_obj(obj, ts)
 
+    async def _send_ws_subscriptions(self, ws) -> None:
+        for channel in self.ws_channels:
+            if channel in self._ws_subscribed_channels:
+                continue
+            payload = {"type": "subscribe", "channel": channel}
+            try:
+                await ws.send(json.dumps(payload))
+                LOG.info("[listener] sent subscription: %s", channel)
+                self._ws_subscribed_channels.add(channel)
+            except Exception as e:
+                LOG.warning("[listener] failed to subscribe %s: %s", channel, e)
+
+    def _route_frame_obj(self, obj: Dict[str, Any], ts: float):
         if not isinstance(obj, dict):
             return
-        ch = obj.get("channel")
-        typ = obj.get("type")
-        if ch == "market_stats:all" and (typ or "").endswith("market_stats"):
-            updates = obj.get("data") or []
-            for item in updates:
-                market_id = item.get("market")
-                mid = item.get("mid")
-                if market_id and isinstance(mid, (int, float)):
-                    if self.state and hasattr(self.state, "update_mid"):
-                        try:
-                            self.state.update_mid(market_id, float(mid), ts)
-                        except Exception as e:
-                            LOG.debug("[listener] state.update_mid failed: %s", e)
-                    LOG.info("[router] mid updated %s -> %.6f", market_id, float(mid))
+
+        channel = (obj.get("channel") or "")
+        msg_type = (obj.get("type") or "")
+
+        if msg_type.endswith("market_stats"):
+            handled = False
+
+            data_list = obj.get("data")
+            if isinstance(data_list, list):
+                for item in data_list:
+                    if not isinstance(item, dict):
+                        continue
+                    market_id = item.get("market")
+                    mid = item.get("mid")
+                    handled = self._handle_market_stats_entry(market_id, mid, ts) or handled
+
+            market_stats_obj = obj.get("market_stats")
+            if isinstance(market_stats_obj, dict):
+                market_id = market_stats_obj.get("market_id")
+                mark_price = market_stats_obj.get("mark_price")
+                handled = self._handle_market_stats_entry(market_id, mark_price, ts) or handled
+
+            if not handled:
+                LOG.debug("[listener] market_stats frame without usable mids: %s", obj)
+
+
+    def _handle_market_stats_entry(self, market_id, mid_value, ts: float) -> bool:
+        formatted_market = self._format_market_id(market_id)
+        if not formatted_market:
+            return False
+
+        mid = self._parse_mid_value(mid_value)
+        if mid is None:
+            return False
+
+        if self.state and hasattr(self.state, "update_mid"):
+            try:
+                self.state.update_mid(formatted_market, float(mid), ts)
+            except Exception as e:
+                LOG.debug("[listener] state.update_mid failed: %s", e)
+                return False
+
+        LOG.info("[router] mid updated %s -> %.6f", formatted_market, float(mid))
+        return True
+
+    def _format_market_id(self, market_id):
+        if isinstance(market_id, str) and market_id:
+            return market_id
+        if isinstance(market_id, int):
+            return f"market:{market_id}"
+        if isinstance(market_id, float) and market_id.is_integer():
+            return f"market:{int(market_id)}"
+        return None
+
+    def _parse_mid_value(self, value):
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return None
+        return None
+
 
     async def _alert(self, level: str, title: str, message: str = ""):
         if getattr(self, "alerts", None) and hasattr(self.alerts, level):

@@ -4,7 +4,7 @@
 
 ✅ **Bot is fully functional** - Working with synthetic data fallback
 
-⚠️ **WebSocket connection issue** - Real market data not yet connected
+⚠️ **WebSocket subscription update in progress** - Updated to Lighter's official `market_stats` channel
 
 ## What's Working
 
@@ -55,12 +55,12 @@ This is **acceptable for**:
 
 ## Next Steps (Optional)
 
-To get real market data, we may need to:
+To get real market data, next steps are:
 
-1. **Check Lighter API docs** for correct WebSocket subscription format
-2. **Verify if authentication required** - May need API keys in WebSocket connection
-3. **Test different channel names** - Try `trade/0`, `market_stats`, etc.
-4. **Contact Lighter support** - Ask for WebSocket connection example
+1. **Redeploy** and confirm we receive `update/market_stats` frames
+2. **Enable API auth** if the stream requires signed tokens (docs mention account feeds need `auth`, market stats may not)
+3. **Monitor logs** for `update/market_stats` entries before fallback triggers
+4. **If still failing**, reach out to Lighter support with the new subscription + pong handling in place
 
 ## References
 
@@ -69,7 +69,7 @@ To get real market data, we may need to:
 
 ## Summary
 
-**The bot is production-ready and working!** 
+**The bot is production-ready and working!**
 
 The WebSocket issue doesn't prevent the bot from functioning - it gracefully falls back to synthetic data. For production trading, you can:
 - Use synthetic data for testing (current state)

@@ -63,6 +63,8 @@ ws:
   url: ${WS_URL}
   fallback_on_fail: true
   max_failures: 3
+  channels:
+    - "market_stats/all"
 
 # Capture (optional - can disable for production)
 capture:
