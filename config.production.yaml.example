@@ -65,6 +65,7 @@ ws:
   max_failures: 3
   channels:
     - "market_stats/all"
+  auth_token: ${WS_AUTH_TOKEN:}
 
 # Capture (optional - can disable for production)
 capture:

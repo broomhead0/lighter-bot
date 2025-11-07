@@ -58,6 +58,25 @@ class MarketDataListener:
             # default: subscribe to all market stats
             self.ws_channels = ["market_stats/all"]
 
+        self.ws_auth_token = ws_cfg.get("auth_token") or os.environ.get("WS_AUTH_TOKEN")
+
+        maker_cfg = self.cfg.get("maker") or {}
+        maker_pairs = maker_cfg.get("pairs") or maker_cfg.get("pair")
+        if isinstance(maker_pairs, str):
+            maker_pairs = [maker_pairs]
+        if isinstance(maker_pairs, (list, tuple)):
+            derived = []
+            for pair in maker_pairs:
+                if isinstance(pair, str) and pair.startswith("market:"):
+                    suffix = pair.split(":", 1)[1]
+                    if suffix:
+                        channel = f"market_stats/{suffix}"
+                        if channel not in self.ws_channels and channel not in derived:
+                            derived.append(channel)
+            if derived:
+                self.ws_channels.extend(derived)
+                LOG.info("[listener] auto-subscribe channels from maker config: %s", derived)
+
         self._ws_subscribed_channels: set[str] = set()
 
         cap_cfg = (
@@ -245,6 +264,8 @@ class MarketDataListener:
             if channel in self._ws_subscribed_channels:
                 continue
             payload = {"type": "subscribe", "channel": channel}
+            if self.ws_auth_token:
+                payload["auth"] = self.ws_auth_token
             try:
                 await ws.send(json.dumps(payload))
                 LOG.info("[listener] sent subscription: %s", channel)

@@ -79,3 +79,4 @@ ws:
   url: wss://mainnet.zklighter.elliot.ai/stream
   channels:
     - "market_stats/all"
+  auth_token: ${WS_AUTH_TOKEN:}

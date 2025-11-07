@@ -57,6 +57,7 @@ This is **acceptable for**:
 
 To get real market data, next steps are:
 
+0. **Auto channels**: the bot now auto-subscribes to `market_stats/<maker pair>` based on `maker.pair` (e.g. `market_stats/1`).
 1. **Redeploy** and confirm we receive `update/market_stats` frames
 2. **Enable API auth** if the stream requires signed tokens (docs mention account feeds need `auth`, market stats may not)
 3. **Monitor logs** for `update/market_stats` entries before fallback triggers
