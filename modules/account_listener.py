@@ -168,9 +168,13 @@ class AccountListener:
 
     def _handle_account_all(self, obj: Dict[str, Any]) -> None:
         trades = obj.get("trades")
-        if isinstance(trades, list):
-            for entry in trades:
+        if isinstance(trades, dict):
+            for trade_id, entry in trades.items():
                 self._handle_trade_entry(entry)
+        positions = obj.get("positions")
+        if isinstance(positions, dict):
+            for market_id, entry in positions.items():
+                self._handle_position_entry(market_id, entry)
 
     def _handle_trade_entry(self, entry: Dict[str, Any]) -> None:
         market_id = entry.get("market_id")
@@ -241,6 +245,28 @@ class AccountListener:
                 self.state.update_inventory(fill.market, quantity)
             except Exception as exc:
                 LOG.debug("[account] state.update_inventory failed: %s", exc)
+        if self.state and hasattr(self.state, "set_inventory"):
+            pass
+
+    def _handle_position_entry(self, market_id: str, entry: Dict[str, Any]) -> None:
+        market = f"market:{market_id}"
+        if self.market_filter and market not in self.market_filter:
+            return
+        position = entry.get("position")
+        if position is None:
+            return
+        try:
+            value = Decimal(str(position))
+        except Exception:
+            LOG.debug("[account] bad position entry: %s", entry)
+            return
+        if not self.state or not hasattr(self.state, "set_inventory"):
+            return
+        try:
+            self.state.set_inventory(market, value)
+            LOG.debug("[account] position updated %s -> %s", market, value)
+        except Exception as exc:
+            LOG.debug("[account] state.set_inventory failed: %s", exc)
 
 
 def fire_and_forget(coro):
