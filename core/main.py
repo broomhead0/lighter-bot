@@ -108,7 +108,8 @@ APP_NAME = "lighter-bot"
 def load_config() -> Dict[str, Any]:
     cfg_path = os.environ.get("LIGHTER_CONFIG", "config.yaml")
     with open(cfg_path, "r") as f:
-        return yaml.safe_load(f) or {}
+        cfg = yaml.safe_load(f) or {}
+    return _apply_env_overrides(cfg)
 
 
 def setup_logging():
@@ -143,14 +144,95 @@ def _try_construct(cls, variants: List[Tuple[tuple, dict]]):
     return cls()  # pragma: no cover
 
 
-class _FallbackMetrics:
-    def __init__(self, markets: Optional[List[str]] = None):
-        self.markets = markets or ["market:1", "market:2", "market:55", "market:99"]
+CONFIG_LOG = logging.getLogger("config")
 
-    async def best_pairs(self, top_n: int = 2) -> List[str]:
-        idx = int(time.time() // 15) % len(self.markets)
-        ordered = self.markets[idx:] + self.markets[:idx]
-        return ordered[: max(1, top_n)]
+
+def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Overlay environment variable values onto the YAML config."""
+    specs: List[Tuple[Tuple[str, ...], str, str]] = [
+        (("app", "log_level"), "APP_LOG_LEVEL", "str"),
+        (("app", "name"), "APP_NAME", "str"),
+        (("ws", "url"), "WS_URL", "str"),
+        (("ws", "auth_token"), "WS_AUTH_TOKEN", "str"),
+        (("ws", "log_mid_interval_s"), "WS_LOG_MID_INTERVAL_S", "float"),
+        (("api", "base_url"), "API_BASE_URL", "str"),
+        (("api", "key"), "API_KEY_PRIVATE_KEY", "str"),
+        (("api", "account_index"), "ACCOUNT_INDEX", "int"),
+        (("api", "api_key_index"), "API_KEY_INDEX", "int"),
+        (("api", "max_api_key_index"), "MAX_API_KEY_INDEX", "int"),
+        (("api", "nonce_management"), "NONCE_MANAGEMENT", "str"),
+        (("maker", "dry_run"), "MAKER_DRY_RUN", "bool"),
+        (("maker", "pair"), "MAKER_PAIR", "str"),
+        (("maker", "size"), "MAKER_SIZE", "float"),
+        (("maker", "spread_bps"), "MAKER_SPREAD_BPS", "float"),
+        (("maker", "refresh_seconds"), "MAKER_REFRESH_SECONDS", "float"),
+        (("maker", "randomize_bps"), "MAKER_RANDOMIZE_BPS", "float"),
+        (("maker", "price_scale"), "MAKER_PRICE_SCALE", "float"),
+        (("maker", "size_scale"), "MAKER_SIZE_SCALE", "float"),
+        (("maker", "limits", "max_cancels"), "MAKER_LIMITS_MAX_CANCELS", "int"),
+        (("maker", "limits", "max_latency_ms"), "MAKER_LIMITS_MAX_LATENCY_MS", "int"),
+        (("alerts", "enabled"), "ALERTS_ENABLED", "bool"),
+        (("alerts", "discord_webhook_url"), "DISCORD_WEBHOOK", "str"),
+        (("telemetry", "enabled"), "TELEMETRY_ENABLED", "bool"),
+        (("telemetry", "port"), "TELEMETRY_PORT", "int"),
+        (("watchdogs", "ws_stale_seconds"), "WATCHDOG_WS_STALE_SECONDS", "int"),
+        (("watchdogs", "quote_stale_seconds"), "WATCHDOG_QUOTE_STALE_SECONDS", "int"),
+        (("watchdogs", "reminder_every_seconds"), "WATCHDOG_REMINDER_EVERY_SECONDS", "int"),
+        (("guard", "price_band_bps"), "GUARD_PRICE_BAND_BPS", "float"),
+        (("guard", "crossed_book_protection"), "GUARD_CROSSED_BOOK_PROTECTION", "bool"),
+        (("guard", "max_position_units"), "GUARD_MAX_POSITION_UNITS", "float"),
+        (("guard", "max_inventory_notional"), "GUARD_MAX_INVENTORY_NOTIONAL", "float"),
+        (("guard", "kill_on_crossed_book"), "GUARD_KILL_ON_CROSSED_BOOK", "bool"),
+        (("guard", "kill_on_inventory_breach"), "GUARD_KILL_ON_INVENTORY_BREACH", "bool"),
+        (("guard", "backoff_seconds_on_block"), "GUARD_BACKOFF_SECONDS_ON_BLOCK", "int"),
+        (("replay", "enabled"), "REPLAY_ENABLED", "bool"),
+        (("chaos", "enabled"), "CHAOS_ENABLED", "bool"),
+    ]
+
+    for path, env_name, kind in specs:
+        raw = os.environ.get(env_name)
+        if raw is None or raw == "":
+            continue
+        try:
+            coerced = _coerce_env_value(raw, kind)
+        except ValueError as exc:
+            CONFIG_LOG.warning(
+                "[config] unable to coerce %s for %s (%s): %s",
+                raw,
+                env_name,
+                "->".join(path),
+                exc,
+            )
+            continue
+        _set_nested(cfg, path, coerced)
+
+    return cfg
+
+
+def _set_nested(cfg: Dict[str, Any], path: Tuple[str, ...], value: Any) -> None:
+    cur = cfg
+    for key in path[:-1]:
+        if key not in cur or not isinstance(cur[key], dict):
+            cur[key] = {}
+        cur = cur[key]
+    cur[path[-1]] = value
+
+
+def _coerce_env_value(raw: str, kind: str) -> Any:
+    if kind == "str":
+        return raw
+    if kind == "int":
+        return int(raw)
+    if kind == "float":
+        return float(raw)
+    if kind == "bool":
+        lowered = raw.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+        raise ValueError("expected boolean value")
+    return raw
 
 
 def _apr_to_8h(apr: float) -> float:
