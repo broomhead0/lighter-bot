@@ -47,7 +47,14 @@ class MakerEngine:
             else {}
         )
         self.market = maker_cfg.get("pair", "market:1")
-        self.size = float(maker_cfg.get("size", 0.001))
+        self.base_size = float(maker_cfg.get("size", 0.001))
+        self.min_size = float(maker_cfg.get("size_min", self.base_size * 0.7))
+        self.max_size = float(maker_cfg.get("size_max", self.base_size * 1.3))
+        if self.min_size > self.max_size:
+            self.min_size, self.max_size = self.max_size, self.min_size
+        self.inventory_soft_cap = float(
+            maker_cfg.get("inventory_soft_cap", self.base_size * 100)
+        )
         self.spread_bps = float(maker_cfg.get("spread_bps", 10.0))  # 10 bps default
         self.refresh_seconds = float(maker_cfg.get("refresh_seconds", 5.0))
         self.randomize_bps = float(
@@ -92,6 +99,7 @@ class MakerEngine:
                     continue
 
                 bid, ask, spread = self._compute_quotes(mid)
+                quote_size = self._compute_quote_size()
 
                 # Check cancel discipline (throttle if exceeded)
                 self._check_cancel_discipline()
@@ -119,7 +127,7 @@ class MakerEngine:
                     )
                     self._record_cancel()
 
-                await self._post_quotes(bid, ask, self.size)
+                await self._post_quotes(bid, ask, quote_size)
 
                 # touch heartbeat for M7 watchdogs
                 self._touch_quote()
@@ -211,6 +219,29 @@ class MakerEngine:
                 self.telemetry.touch("quote")
             except Exception:
                 pass
+
+    def _compute_quote_size(self) -> float:
+        size = self.base_size
+        min_size = max(1e-6, self.min_size)
+        max_size = max(min_size, self.max_size)
+        inv_soft_cap = max(1e-9, self.inventory_soft_cap)
+
+        if self.state and hasattr(self.state, "get_inventory"):
+            try:
+                inv = self.state.get_inventory(self.market)
+                if inv is not None:
+                    inv_float = abs(float(inv))
+                    ratio = min(1.0, inv_float / inv_soft_cap)
+                    size = max_size - (max_size - min_size) * ratio
+            except Exception:
+                size = self.base_size
+        size = min(max_size, max(min_size, size))
+        if getattr(self, "telemetry", None):
+            try:
+                self.telemetry.set_gauge("maker_quote_size", float(size))
+            except Exception:
+                pass
+        return float(size)
 
     async def _alert(self, level: str, title: str, message: str = ""):
         if getattr(self, "alerts", None) and hasattr(self.alerts, level):

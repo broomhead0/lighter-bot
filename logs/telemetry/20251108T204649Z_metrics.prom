@@ -1,0 +1,44 @@
+# TYPE app_start_ts gauge
+app_start_ts 1762619796.9781346
+# TYPE uptime_seconds gauge
+uptime_seconds 15013.112936496735
+# TYPE fees_maker_notional gauge
+fees_maker_notional 3934.246546
+# TYPE fees_taker_notional gauge
+fees_taker_notional 922.28754
+# TYPE fees_maker_fee_actual gauge
+fees_maker_fee_actual 0.0
+# TYPE fees_maker_fee_premium gauge
+fees_maker_fee_premium 0.07868493092
+# TYPE fees_taker_fee_actual gauge
+fees_taker_fee_actual 0.0
+# TYPE fees_taker_fee_premium gauge
+fees_taker_fee_premium 0.184457508
+# TYPE fees_hedger_notional gauge
+fees_hedger_notional 940.828261086
+# TYPE fees_hedger_fee_premium gauge
+fees_hedger_fee_premium 0.1881656522172
+# TYPE fees_maker_fill_count gauge
+fees_maker_fill_count 397.0
+# TYPE fees_taker_fill_count gauge
+fees_taker_fill_count 196.0
+# TYPE pnl_maker_edge gauge
+pnl_maker_edge 0.98341
+# TYPE pnl_taker_slippage gauge
+pnl_taker_slippage 0.11874
+# TYPE ws_last heartbeat
+ws_last 1762634810.9209325
+# TYPE ws_age_seconds gauge
+ws_age_seconds 0.08534669876098633
+# TYPE quote_last heartbeat
+quote_last 1762634795.4516935
+# TYPE quote_age_seconds gauge
+quote_age_seconds 15.554585695266724
+# TYPE fill_last heartbeat
+fill_last 1762634804.2537243
+# TYPE fill_age_seconds gauge
+fill_age_seconds 6.752554893493652
+# TYPE hedge_last heartbeat
+hedge_last 1762634803.8680806
+# TYPE hedge_age_seconds gauge
+hedge_age_seconds 7.138198614120483
