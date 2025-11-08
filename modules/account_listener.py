@@ -318,6 +318,42 @@ class AccountListener:
             except Exception as exc:
                 LOG.debug("[account] record_volume_sample failed: %s", exc)
 
+        mid_dec: Optional[Decimal] = None
+        if hasattr(self.state, "get_mid"):
+            try:
+                mid_val = self.state.get_mid(fill.market)
+                if mid_val is not None:
+                    mid_dec = Decimal(str(mid_val))
+            except Exception:
+                mid_dec = None
+        if mid_dec is not None:
+            try:
+                if fill.role == "maker" and hasattr(self.state, "record_maker_edge"):
+                    maker_is_ask = bool(fill.raw.get("is_maker_ask"))
+                    if maker_is_ask:
+                        edge = (fill.price - mid_dec) * fill.size
+                    else:
+                        edge = (mid_dec - fill.price) * fill.size
+                    if edge > 0:
+                        self.state.record_maker_edge(edge)
+                elif fill.role == "taker" and hasattr(self.state, "record_taker_slippage"):
+                    acct = self.account_index
+                    taker_side = None
+                    if acct is not None:
+                        acct_str = str(acct)
+                        if str(fill.raw.get("bid_account_id")) == acct_str:
+                            taker_side = "bid"
+                        elif str(fill.raw.get("ask_account_id")) == acct_str:
+                            taker_side = "ask"
+                    if taker_side:
+                        if taker_side == "ask":
+                            slip = (mid_dec - fill.price) * fill.size
+                        else:
+                            slip = (fill.price - mid_dec) * fill.size
+                        self.state.record_taker_slippage(abs(slip))
+            except Exception as exc:
+                LOG.debug("[account] edge tracking failed: %s", exc)
+
     def _handle_position_entry(self, market_id: str, entry: Dict[str, Any]) -> None:
         market = f"market:{market_id}"
         if self.market_filter and market not in self.market_filter:

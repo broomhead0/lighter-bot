@@ -49,6 +49,10 @@ class StateStore:
             "maker": 0,
             "taker": 0,
         }
+        self._pnl_stats = {
+            "maker_edge": Decimal("0"),
+            "taker_slippage": Decimal("0"),
+        }
 
     # -------- Mids ----------
     def set_mid(self, market_id: str, price: float) -> None:
@@ -157,6 +161,15 @@ class StateStore:
         out["maker_fill_count"] = float(self._fill_counts["maker"])
         out["taker_fill_count"] = float(self._fill_counts["taker"])
         return out
+
+    def record_maker_edge(self, value: Decimal) -> None:
+        self._pnl_stats["maker_edge"] += Decimal(str(value))
+
+    def record_taker_slippage(self, value: Decimal) -> None:
+        self._pnl_stats["taker_slippage"] += Decimal(str(value))
+
+    def get_pnl_stats(self) -> Dict[str, float]:
+        return {key: float(val) for key, val in self._pnl_stats.items()}
 
     # -------- Time ----------
     def now(self) -> float:

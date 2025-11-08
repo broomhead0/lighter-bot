@@ -855,6 +855,13 @@ async def main():
                         telemetry.set_gauge(f"fees_{key}", float(value))
                 except Exception as exc:
                     logging.getLogger("telemetry").debug("fee stats update failed: %s", exc)
+            if state and hasattr(state, "get_pnl_stats"):
+                try:
+                    pnl_stats = state.get_pnl_stats()
+                    for key, value in pnl_stats.items():
+                        telemetry.set_gauge(f"pnl_{key}", float(value))
+                except Exception as exc:
+                    logging.getLogger("telemetry").debug("pnl stats update failed: %s", exc)
             await asyncio.sleep(5.0)
 
     tasks.append(asyncio.create_task(periodic_core_metrics(), name="metrics"))
