@@ -27,7 +27,7 @@ maker:
   size_scale: 1        # Override with instrument-specific scaler (e.g. 1e6)
 hedger:
   enabled: true
-  dry_run: true              # run dry until premium fees are justified
+  dry_run: false             # temporarily enable live hedging for fee data
   market: market:2
   trigger_units: 0.24        # allow inventory to build closer to guard cap before hedging
   trigger_notional: 50       # only hedge once notional drift is meaningful
