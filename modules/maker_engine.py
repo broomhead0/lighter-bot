@@ -32,6 +32,7 @@ class MakerEngine:
         telemetry: Any = None,  # M7 optional
         chaos_injector: Any = None,  # M8 optional
         guard: Any = None,  # SelfTradeGuard
+        trading_client: Optional[TradingClient] = None,
     ):
         self.cfg = config or {}
         self.state = state
@@ -65,15 +66,18 @@ class MakerEngine:
         self._open_orders: Dict[str, Dict[str, Any]] = {}  # order_id -> order info
 
         # Trading client (Signer-based) for live order placement
-        self._trading_client: Optional[TradingClient] = None
-        api_cfg = self.cfg.get("api") or {}
-        trading_cfg = self._build_trading_config(api_cfg)
-        if trading_cfg:
-            try:
-                self._trading_client = TradingClient(trading_cfg)
-                LOG.info("[maker] trading client ready for live orders")
-            except Exception as exc:
-                LOG.warning("[maker] trading client unavailable: %s", exc)
+        self._trading_client: Optional[TradingClient] = trading_client
+        self._owns_trading_client = False
+        if self._trading_client is None:
+            api_cfg = self.cfg.get("api") or {}
+            trading_cfg = self._build_trading_config(api_cfg)
+            if trading_cfg:
+                try:
+                    self._trading_client = TradingClient(trading_cfg)
+                    self._owns_trading_client = True
+                    LOG.info("[maker] trading client ready for live orders")
+                except Exception as exc:
+                    LOG.warning("[maker] trading client unavailable: %s", exc)
 
         self._stop = asyncio.Event()
 
@@ -137,7 +141,7 @@ class MakerEngine:
 
     async def stop(self):
         self._stop.set()
-        if self._trading_client:
+        if self._owns_trading_client and self._trading_client:
             try:
                 await self._trading_client.close()
             except Exception as exc:

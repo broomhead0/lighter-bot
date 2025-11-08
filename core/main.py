@@ -6,6 +6,7 @@ import os
 import signal
 import sys
 import time
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -67,6 +68,8 @@ try:
     from modules.account_listener import AccountListener
 except Exception:  # noqa
     AccountListener = None  # type: ignore
+
+from core.trading_client import TradingClient, TradingConfig
 
 try:
     from modules.hedger import Hedger
@@ -545,6 +548,42 @@ def fire_and_forget(coro):  # type: ignore
         pass
 
 
+def _build_trading_config(
+    api_cfg: Dict[str, Any],
+    maker_cfg: Optional[Dict[str, Any]],
+) -> Optional[TradingConfig]:
+    base_url = api_cfg.get("base_url")
+    private_key = api_cfg.get("private_key") or api_cfg.get("key")
+    account_index = api_cfg.get("account_index")
+    api_key_index = api_cfg.get("api_key_index")
+
+    if not (base_url and private_key and account_index is not None and api_key_index is not None):
+        return None
+
+    maker_cfg = maker_cfg or {}
+    base_scale = Decimal(str(maker_cfg.get("size_scale", 1)))
+    price_scale = Decimal(str(maker_cfg.get("price_scale", 1)))
+
+    try:
+        return TradingConfig(
+            base_url=str(base_url),
+            api_key_private_key=str(private_key),
+            account_index=int(account_index),
+            api_key_index=int(api_key_index),
+            base_scale=base_scale,
+            price_scale=price_scale,
+            max_api_key_index=(
+                int(api_cfg["max_api_key_index"])
+                if api_cfg.get("max_api_key_index") is not None
+                else None
+            ),
+            nonce_management=api_cfg.get("nonce_management"),
+        )
+    except Exception as exc:
+        logging.getLogger("trading").warning("[main] invalid trading config: %s", exc)
+        return None
+
+
 async def main():
     setup_logging()
     cfg = load_config()
@@ -599,6 +638,18 @@ async def main():
 
     # --- Core components ---
     state = StateStore() if StateStore else SimpleNamespace()
+    shared_trading_client: Optional[TradingClient] = None
+    api_cfg = cfg.get("api") or {}
+    maker_cfg = cfg.get("maker") or {}
+    trading_cfg = _build_trading_config(api_cfg, maker_cfg)
+    if trading_cfg:
+        try:
+            shared_trading_client = TradingClient(trading_cfg)
+            logging.getLogger("main").info("[main] shared trading client initialized")
+        except Exception as exc:
+            shared_trading_client = None
+            logging.getLogger("main").warning("[main] shared trading client unavailable: %s", exc)
+
     state_adapter = _StateAdapter(state)
 
     # --- Chaos injector (M8) ---
@@ -696,6 +747,7 @@ async def main():
                         "telemetry": telemetry,
                         "chaos_injector": chaos,
                         "guard": self_trade_guard,
+                        "trading_client": shared_trading_client,
                     },
                 ),
                 ((), {"config": cfg, "state": state}),
@@ -716,6 +768,7 @@ async def main():
                     state=state,
                     telemetry=telemetry,
                     alert_manager=alert_mgr,
+                    trading_client=shared_trading_client,
                 )
                 logging.getLogger("main").info("[main] Hedger initialized")
             except Exception as exc:
@@ -982,6 +1035,11 @@ async def main():
         await asyncio.gather(*tasks, return_exceptions=True)
         telemetry.set_gauge("shutdown_ts", time.time())
         fire_and_forget(alert_mgr.info("Shutdown", f"{app} stopped."))
+        if shared_trading_client:
+            try:
+                await shared_trading_client.close()
+            except Exception as exc:
+                logging.getLogger("main").debug("[main] shared trading client close failed: %s", exc)
 
 
 if __name__ == "__main__":

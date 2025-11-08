@@ -23,6 +23,7 @@ class Hedger:
         state: Any = None,
         telemetry: Any = None,
         alert_manager: Any = None,
+        trading_client: Optional[TradingClient] = None,
     ):
         self.cfg = config or {}
         self.state = state
@@ -87,10 +88,12 @@ class Hedger:
 
         api_cfg = self.cfg.get("api") or {}
         trading_cfg = self._build_trading_config(api_cfg, maker_cfg)
-        self._trading_client: Optional[TradingClient] = None
-        if trading_cfg:
+        self._trading_client: Optional[TradingClient] = trading_client
+        self._owns_trading_client = False
+        if self._trading_client is None and trading_cfg:
             try:
                 self._trading_client = TradingClient(trading_cfg)
+                self._owns_trading_client = True
                 LOG.info("[hedger] trading client ready for live hedges")
             except Exception as exc:
                 LOG.warning("[hedger] trading client unavailable: %s", exc)
@@ -113,7 +116,7 @@ class Hedger:
         self._wake.set()
         if self._loop_task:
             self._loop_task.cancel()
-        if self._trading_client:
+        if self._owns_trading_client and self._trading_client:
             try:
                 await self._trading_client.close()
             except Exception as exc:
