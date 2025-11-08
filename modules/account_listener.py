@@ -225,6 +225,23 @@ class AccountListener:
                 role = "taker"
             else:
                 return
+        else:
+            ask_id = entry.get("ask_account_id")
+            bid_id = entry.get("bid_account_id")
+            maker_is_ask = bool(entry.get("is_maker_ask"))
+            maker_id = str(ask_id) if maker_is_ask else str(bid_id)
+            taker_id = str(bid_id) if maker_is_ask else str(ask_id)
+            synced_account = str(entry.get("maker_account_id") or maker_id)
+            if hasattr(self.state, "get_account_index"):
+                acct_idx = self.state.get_account_index()
+                if acct_idx is not None:
+                    synced_account = str(acct_idx)
+            if synced_account == maker_id:
+                role = "maker"
+            elif synced_account == taker_id:
+                role = "taker"
+            else:
+                return
 
         try:
             size_dec = Decimal(str(size))
