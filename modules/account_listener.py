@@ -330,6 +330,15 @@ class AccountListener:
         except Exception:
             LOG.debug("[account] bad position entry: %s", entry)
             return
+        sign_indicator = entry.get("sign")
+        try:
+            if isinstance(sign_indicator, (int, float)) and sign_indicator < 0:
+                value = -value
+            elif isinstance(sign_indicator, str):
+                if sign_indicator.strip() == "-1":
+                    value = -value
+        except Exception:
+            pass
         if not self.state or not hasattr(self.state, "set_inventory"):
             return
         try:
