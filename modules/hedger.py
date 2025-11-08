@@ -193,7 +193,12 @@ class Hedger:
             LOG.debug("[hedger] cooling down (%.2fs remaining)", self._next_allowed_ts - time.time())
             return
 
-        success = await self._execute_hedge(side, float(hedge_units), price)
+        success = await self._execute_hedge(
+            side=side,
+            size=float(hedge_units),
+            price=price,
+            mid=mid,
+        )
         if success and self.telemetry and hasattr(self.telemetry, "touch"):
             try:
                 self.telemetry.touch("hedge")
@@ -218,10 +223,25 @@ class Hedger:
             return max(0.0, mid - offset)
         return mid + offset
 
-    async def _execute_hedge(self, side: str, size: float, price: float) -> bool:
-        notional = Decimal(str(size)) * Decimal(str(price))
+    async def _execute_hedge(
+        self,
+        side: str,
+        size: float,
+        price: float,
+        mid: Optional[float] = None,
+    ) -> bool:
+        size_dec = Decimal(str(size))
+        price_dec = Decimal(str(price))
+        notional = size_dec * price_dec
         fee_actual = notional * self.taker_fee_actual
         fee_premium = notional * self.taker_fee_premium
+        slip_value: Optional[Decimal] = None
+        if mid is not None:
+            try:
+                mid_dec = Decimal(str(mid))
+                slip_value = abs(mid_dec - price_dec) * size_dec
+            except Exception:
+                slip_value = None
 
         LOG.info(
             "[hedger] hedging %s %.6f at %.4f (dry_run=%s) notional=%.6f est_fee_premium=%.8f",
@@ -240,6 +260,7 @@ class Hedger:
                 pass
 
         if self.dry_run:
+            self._record_simulated_slippage(notional, slip_value)
             return True
 
         if not self._trading_client:
@@ -273,6 +294,7 @@ class Hedger:
                     fee_premium,
                     fee_actual,
                 )
+                self._record_simulated_slippage(notional, slip_value)
                 return True
             except Exception as exc:
                 LOG.warning("[hedger] hedge attempt %s failed: %s", attempts, exc)
@@ -290,6 +312,32 @@ class Hedger:
         if self.alerts and hasattr(self.alerts, level):
             try:
                 await getattr(self.alerts, level)(title, message)
+            except Exception:
+                pass
+
+    def _record_simulated_slippage(
+        self,
+        notional: Decimal,
+        slip_value: Optional[Decimal],
+    ) -> None:
+        if (
+            self.dry_run
+            and slip_value is not None
+            and self.state
+            and hasattr(self.state, "record_taker_slippage")
+        ):
+            try:
+                self.state.record_taker_slippage(slip_value)
+            except Exception:
+                pass
+        if self.dry_run and self.state and hasattr(self.state, "record_volume_sample"):
+            try:
+                self.state.record_volume_sample(
+                    role="taker",
+                    notional=notional,
+                    fee_actual=notional * self.taker_fee_actual,
+                    fee_premium=notional * self.taker_fee_premium,
+                )
             except Exception:
                 pass
 
