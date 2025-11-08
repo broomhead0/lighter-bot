@@ -104,6 +104,7 @@ class MakerEngine:
                             "[maker] quote blocked by guard: mid=%.4f bid=%.4f ask=%.4f",
                             mid, bid, ask
                         )
+                        await self._cancel_all_orders()
                         await asyncio.sleep(self.refresh_seconds)
                         continue
 
