@@ -44,6 +44,13 @@ class Hedger:
         self.market = (
             hedger_cfg.get("market") or maker_cfg.get("pair") or "market:1"
         )
+
+        LOG.info(
+            "[hedger] config snapshot dry_run=%s trigger_units=%s trigger_notional=%s",
+            hedger_cfg.get("dry_run", maker_cfg.get("dry_run", True)),
+            hedger_cfg.get("trigger_units"),
+            hedger_cfg.get("trigger_notional"),
+        )
         self.trigger_units = Decimal(
             str(hedger_cfg.get("trigger_units", 0.05))
         )
