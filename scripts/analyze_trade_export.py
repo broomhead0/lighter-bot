@@ -82,14 +82,37 @@ def summarise_trades(trades: Iterable[TradeSample]) -> None:
             taker_count += 1
 
         side = trade.side.lower()
+
+        delta = Decimal("0")
         if "open long" in side or "long > short" in side:
-            net_position += trade.size
+            delta = trade.size
         elif "close long" in side or "short > long" in side:
-            net_position -= trade.size
+            delta = -trade.size
         elif "open short" in side:
-            net_position -= trade.size
-        elif "close short" in side or "long > short" in side:
-            net_position += trade.size
+            delta = -trade.size
+        elif "close short" in side:
+            delta = trade.size
+
+        if delta != 0:
+            prev_position = net_position
+            new_position = net_position + delta
+
+            if prev_position == 0:
+                avg_entry = trade.price
+            elif prev_position > 0 and new_position > 0:
+                avg_entry = (
+                    (avg_entry * prev_position) + (trade.price * delta)
+                ) / new_position
+            elif prev_position < 0 and new_position < 0:
+                avg_entry = (
+                    (avg_entry * (-prev_position)) + (trade.price * (-delta))
+                ) / (-new_position)
+            elif prev_position > 0 and new_position <= 0:
+                avg_entry = Decimal("0") if new_position == 0 else trade.price
+            elif prev_position < 0 and new_position >= 0:
+                avg_entry = Decimal("0") if new_position == 0 else trade.price
+
+            net_position = new_position
 
         if trade.closed_pnl < Decimal("0"):
             track_extremes(worst_losses, trade, limit=10, reverse=False)
@@ -98,8 +121,10 @@ def summarise_trades(trades: Iterable[TradeSample]) -> None:
 
     realized_pnl = maker_pnl + taker_pnl
     mtm = Decimal("0")
-    if net_position != 0 and last_price != 0:
+    if net_position > 0 and last_price != 0:
         mtm = (last_price - avg_entry) * net_position
+    elif net_position < 0 and last_price != 0:
+        mtm = (avg_entry - last_price) * (-net_position)
 
     print("== Summary ==")
     print(f"Maker PnL:            ${maker_pnl:.6f} across {maker_count} fills")
