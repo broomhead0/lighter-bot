@@ -51,6 +51,7 @@ class Hedger:
             hedger_cfg.get("trigger_units"),
             hedger_cfg.get("trigger_notional"),
         )
+        self._explicit_dry_run = "dry_run" in hedger_cfg
         self.trigger_units = Decimal(
             str(hedger_cfg.get("trigger_units", 0.05))
         )
@@ -79,7 +80,7 @@ class Hedger:
         self.dry_run = bool(hedger_cfg.get("dry_run", maker_cfg.get("dry_run", True)))
 
         # If taker fees are zero (standard tier), force dry-run to avoid accidental cost.
-        if self.taker_fee_actual == Decimal("0"):
+        if self.taker_fee_actual == Decimal("0") and not self._explicit_dry_run:
             if not self.dry_run:
                 LOG.info("[hedger] forcing dry-run mode while taker fees are zero-tier")
             self.dry_run = True
