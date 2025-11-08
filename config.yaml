@@ -30,7 +30,7 @@ hedger:
   dry_run: false             # temporarily enable live hedging for fee data
   market: market:2
   trigger_units: 0.24        # allow inventory to build closer to guard cap before hedging
-  trigger_notional: 50       # only hedge once notional drift is meaningful
+  trigger_notional: 30       # hedge once drift exceeds ~$30 notional
   target_units: 0.18         # leave room so we don't keep re-hedging tiny fills
   max_clip_units: 0.07       # hedge one maker clip at a time
   price_offset_bps: 10       # cross the spread by 10 bps for fast fill
