@@ -1,6 +1,7 @@
 # core/main.py
 import asyncio
 import inspect
+import json
 import logging
 import os
 import signal
@@ -898,6 +899,9 @@ async def main():
 
     tasks: List[asyncio.Task] = []
 
+    pnl_log_path = os.environ.get("PNL_LOG_PATH", "logs/pnl_stats.jsonl")
+    last_pnl_written = {"maker_edge": 0.0, "taker_slippage": 0.0}
+
     async def periodic_core_metrics():
         while not stop_event.is_set():
             telemetry.set_gauge("uptime_seconds", max(0.0, time.time() - start_ts))
@@ -913,6 +917,27 @@ async def main():
                     pnl_stats = state.get_pnl_stats()
                     for key, value in pnl_stats.items():
                         telemetry.set_gauge(f"pnl_{key}", float(value))
+                    if any(
+                        abs(pnl_stats.get(k, 0.0) - last_pnl_written.get(k, 0.0)) > 1e-9
+                        for k in last_pnl_written
+                    ):
+                        try:
+                            os.makedirs(os.path.dirname(pnl_log_path), exist_ok=True)
+                            with open(pnl_log_path, "a", encoding="utf-8") as fh:
+                                record = {
+                                    "timestamp": time.time(),
+                                    "maker_edge": float(pnl_stats.get("maker_edge", 0.0)),
+                                    "taker_slippage": float(pnl_stats.get("taker_slippage", 0.0)),
+                                }
+                                fh.write(json.dumps(record) + "\n")
+                            last_pnl_written.update(
+                                {
+                                    "maker_edge": pnl_stats.get("maker_edge", 0.0),
+                                    "taker_slippage": pnl_stats.get("taker_slippage", 0.0),
+                                }
+                            )
+                        except Exception as exc:
+                            logging.getLogger("telemetry").debug("pnl persist failed: %s", exc)
                 except Exception as exc:
                     logging.getLogger("telemetry").debug("pnl stats update failed: %s", exc)
             await asyncio.sleep(5.0)

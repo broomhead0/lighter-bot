@@ -171,6 +171,10 @@ class StateStore:
     def get_pnl_stats(self) -> Dict[str, float]:
         return {key: float(val) for key, val in self._pnl_stats.items()}
 
+    def reset_pnl_stats(self) -> None:
+        self._pnl_stats["maker_edge"] = Decimal("0")
+        self._pnl_stats["taker_slippage"] = Decimal("0")
+
     # -------- Time ----------
     def now(self) -> float:
         return time.time()
