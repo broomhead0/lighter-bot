@@ -21,21 +21,22 @@ maker:
     max_latency_ms: 2000
   loop_delay: 2
   pair: market:1
-  size: 0.001
-  spread_bps: 10
+  size: 0.0008
+  spread_bps: 12
   price_scale: 1       # Override with instrument-specific scaler (e.g. 100)
   size_scale: 1        # Override with instrument-specific scaler (e.g. 1e6)
 hedger:
   enabled: true
   dry_run: false             # temporarily enable live hedging for fee data
   market: market:2
-  trigger_units: 0.16        # tighten hedge trigger to reduce taker drag
-  trigger_notional: 20       # act once drift exceeds ~$20 notional
-  target_units: 0.02         # drive inventory closer to flat
-  max_clip_units: 0.05       # hedge one maker clip at a time
-  price_offset_bps: 9        # cross just enough to fill without huge slippage
+  trigger_units: 0.18        # allow a bit more drift before hedging
+  trigger_notional: 25       # hedge once drift exceeds ~$25 notional
+  target_units: 0.03         # drive inventory toward tighter band
+  max_clip_units: 0.03       # hedge smaller clips to limit taker drag
+  price_offset_bps: 6        # keep hedges close to mid to reduce slippage
+  max_slippage_bps: 8        # skip hedges if implied slippage exceeds cap
   poll_interval_seconds: 1.0
-  cooldown_seconds: 7.0
+  cooldown_seconds: 12.0
   max_attempts: 3
   retry_backoff_seconds: 2.0
 fees:

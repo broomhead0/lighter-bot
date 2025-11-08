@@ -72,6 +72,7 @@ class Hedger:
         self.price_offset_bps = float(hedger_cfg.get("price_offset_bps", 8.0))
         self.poll_interval_s = float(hedger_cfg.get("poll_interval_seconds", 1.5))
         self.cooldown_seconds = float(hedger_cfg.get("cooldown_seconds", 5.0))
+        self.max_slippage_bps = float(hedger_cfg.get("max_slippage_bps", 12.0))
         self.max_attempts = int(hedger_cfg.get("max_attempts", 3))
         self.retry_backoff_s = float(hedger_cfg.get("retry_backoff_seconds", 2.0))
         fees_cfg = self.cfg.get("fees") if isinstance(self.cfg.get("fees"), dict) else {}
@@ -240,8 +241,24 @@ class Hedger:
             try:
                 mid_dec = Decimal(str(mid))
                 slip_value = abs(mid_dec - price_dec) * size_dec
+                slip_bps = abs(mid_dec - price_dec) / mid_dec * Decimal("10000") if mid_dec != 0 else None
             except Exception:
                 slip_value = None
+                slip_bps = None
+        else:
+            slip_bps = None
+
+        if (
+            slip_bps is not None
+            and self.max_slippage_bps > 0
+            and float(slip_bps) > self.max_slippage_bps
+        ):
+            LOG.warning(
+                "[hedger] skipping hedge (slippage %.2fbps exceeds cap %.2fbps)",
+                float(slip_bps),
+                self.max_slippage_bps,
+            )
+            return False
 
         LOG.info(
             "[hedger] hedging %s %.6f at %.4f (dry_run=%s) notional=%.6f est_fee_premium=%.8f",
