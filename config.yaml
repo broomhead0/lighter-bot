@@ -29,13 +29,13 @@ hedger:
   enabled: true
   dry_run: true              # run dry until premium fees are justified
   market: market:2
-  trigger_units: 0.18        # start hedging once exposure exceeds ~0.18 SOL
-  trigger_notional: 30       # optional notional trigger (~$30)
-  target_units: 0.04         # leave small tolerance before re-quoting
+  trigger_units: 0.24        # allow inventory to build closer to guard cap before hedging
+  trigger_notional: 50       # only hedge once notional drift is meaningful
+  target_units: 0.18         # leave room so we don't keep re-hedging tiny fills
   max_clip_units: 0.07       # hedge one maker clip at a time
   price_offset_bps: 10       # cross the spread by 10 bps for fast fill
   poll_interval_seconds: 1.0
-  cooldown_seconds: 5.0
+  cooldown_seconds: 30.0
   max_attempts: 3
   retry_backoff_seconds: 2.0
 fees:
