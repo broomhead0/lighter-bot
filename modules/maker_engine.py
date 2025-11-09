@@ -64,6 +64,32 @@ class MakerEngine:
         )  # random widen/narrow
         self.allow_synthetic_fallback = bool(maker_cfg.get("synthetic_fallback", False))
 
+        vol_cfg = maker_cfg.get("volatility") or {}
+        self.vol_enabled = bool(vol_cfg.get("enabled", False))
+        self.vol_low_bps = float(vol_cfg.get("low_bps", 5.0))
+        self.vol_high_bps = float(vol_cfg.get("high_bps", 25.0))
+        self.vol_min_spread = float(
+            vol_cfg.get("min_spread_bps", self.spread_bps)
+        )
+        self.vol_max_spread = float(
+            vol_cfg.get("max_spread_bps", max(self.spread_bps, self.spread_bps * 2))
+        )
+        self.vol_min_size_multiplier = float(vol_cfg.get("min_size_multiplier", 0.5))
+        self.vol_max_size_multiplier = float(vol_cfg.get("max_size_multiplier", 1.0))
+        if self.vol_min_size_multiplier > self.vol_max_size_multiplier:
+            self.vol_min_size_multiplier, self.vol_max_size_multiplier = (
+                self.vol_max_size_multiplier,
+                self.vol_min_size_multiplier,
+            )
+        self.vol_pause_threshold = float(vol_cfg.get("pause_threshold_bps", 35.0))
+        self.vol_resume_threshold = float(vol_cfg.get("resume_threshold_bps", 25.0))
+        self.vol_half_life = max(float(vol_cfg.get("ema_halflife_seconds", 30.0)), 1.0)
+        self._volatility_ema: Optional[float] = None
+        self._volatility_last_mid: Optional[float] = None
+        self._volatility_last_ts: float = time.time()
+        self._volatility_paused = False
+        self._latest_volatility_bps: float = 0.0
+
         # Cancel discipline tracking
         limits_cfg = maker_cfg.get("limits") or {}
         self.max_cancels = int(limits_cfg.get("max_cancels", 30))
@@ -100,8 +126,20 @@ class MakerEngine:
                     await asyncio.sleep(1.0)
                     continue
 
-                bid, ask, spread = self._compute_quotes(mid)
-                quote_size = self._compute_quote_size()
+                volatility_bps = self._update_volatility(mid)
+                self._latest_volatility_bps = volatility_bps
+
+                if self.vol_enabled and self._volatility_paused:
+                    LOG.debug(
+                        "[maker] skipping quotes due to high volatility (%.2fbps)",
+                        volatility_bps,
+                    )
+                    self._touch_quote()
+                    await asyncio.sleep(self.refresh_seconds)
+                    continue
+
+                bid, ask, spread = self._compute_quotes(mid, volatility_bps)
+                quote_size = self._compute_quote_size(volatility_bps)
 
                 # Check cancel discipline (throttle if exceeded)
                 self._check_cancel_discipline()
@@ -181,9 +219,12 @@ class MakerEngine:
             return self._synthetic_mid()
         return None
 
-    def _compute_quotes(self, mid: float) -> Tuple[float, float, float]:
+    def _compute_quotes(
+        self, mid: float, volatility_bps: Optional[float] = None
+    ) -> Tuple[float, float, float]:
+        base_spread = self._spread_for_volatility(volatility_bps)
         jitter = random.uniform(-self.randomize_bps, self.randomize_bps)
-        bps = max(1e-6, self.spread_bps + jitter)
+        bps = max(1e-6, base_spread + jitter)
 
         # Apply chaos quote-width spikes if enabled
         if self.chaos:
@@ -231,7 +272,7 @@ class MakerEngine:
             except Exception:
                 pass
 
-    def _compute_quote_size(self) -> float:
+    def _compute_quote_size(self, volatility_bps: Optional[float] = None) -> float:
         size = self.base_size
         min_size = max(1e-6, self.min_size)
         max_size = max(min_size, self.max_size)
@@ -246,6 +287,13 @@ class MakerEngine:
                     size = max_size - (max_size - min_size) * ratio
             except Exception:
                 size = self.base_size
+
+        if self.vol_enabled and volatility_bps is not None:
+            factor = self._volatility_factor(volatility_bps)
+            multiplier_span = self.vol_max_size_multiplier - self.vol_min_size_multiplier
+            multiplier = self.vol_max_size_multiplier - multiplier_span * factor
+            size *= max(0.0, multiplier)
+
         size = min(max_size, max(min_size, size))
         if size < self.exchange_min_size:
             size = self.exchange_min_size
@@ -399,3 +447,82 @@ class MakerEngine:
         except Exception as exc:
             LOG.warning("[maker] invalid trading config: %s", exc)
             return None
+
+    def _update_volatility(self, mid: Optional[float]) -> float:
+        if not self.vol_enabled or mid is None:
+            vol = float(self._volatility_ema or 0.0)
+            if self.telemetry:
+                try:
+                    self.telemetry.set_gauge("maker_volatility_bps", vol)
+                    self.telemetry.set_gauge("maker_volatility_paused", 0.0)
+                except Exception:
+                    pass
+            return vol
+
+        now = time.time()
+        if self._volatility_last_mid is None:
+            self._volatility_last_mid = mid
+            self._volatility_last_ts = now
+            self._volatility_ema = 0.0
+            return 0.0
+
+        dt = max(now - self._volatility_last_ts, 1e-6)
+        change = abs(mid - self._volatility_last_mid) / max(
+            self._volatility_last_mid, 1e-9
+        )
+        change_bps = change * 10000.0
+        alpha = 1 - math.exp(-math.log(2) * dt / self.vol_half_life)
+        prev = self._volatility_ema or change_bps
+        self._volatility_ema = prev + alpha * (change_bps - prev)
+
+        self._volatility_last_mid = mid
+        self._volatility_last_ts = now
+
+        vol = float(self._volatility_ema)
+        if self.vol_enabled:
+            was_paused = self._volatility_paused
+            if not self._volatility_paused and vol >= self.vol_pause_threshold:
+                self._volatility_paused = True
+                LOG.warning(
+                    "[maker] volatility %.2fbps above pause threshold %.2fbps; pausing quotes",
+                    vol,
+                    self.vol_pause_threshold,
+                )
+            elif self._volatility_paused and vol <= self.vol_resume_threshold:
+                self._volatility_paused = False
+                LOG.info(
+                    "[maker] volatility %.2fbps below resume threshold %.2fbps; resuming quotes",
+                    vol,
+                    self.vol_resume_threshold,
+                )
+            if was_paused != self._volatility_paused and self.telemetry:
+                LOG.debug(
+                    "[maker] volatility pause state changed: %s",
+                    "paused" if self._volatility_paused else "active",
+                )
+
+        if self.telemetry:
+            try:
+                self.telemetry.set_gauge("maker_volatility_bps", float(vol))
+                self.telemetry.set_gauge(
+                    "maker_volatility_paused", 1.0 if self._volatility_paused else 0.0
+                )
+            except Exception:
+                pass
+        return vol
+
+    def _volatility_factor(self, vol_bps: float) -> float:
+        if not self.vol_enabled:
+            return 0.0
+        if self.vol_high_bps <= self.vol_low_bps:
+            return 0.0
+        factor = (vol_bps - self.vol_low_bps) / (self.vol_high_bps - self.vol_low_bps)
+        return max(0.0, min(1.0, factor))
+
+    def _spread_for_volatility(self, volatility_bps: Optional[float]) -> float:
+        if not self.vol_enabled or volatility_bps is None:
+            return self.spread_bps
+        factor = self._volatility_factor(volatility_bps)
+        spread_span = self.vol_max_spread - self.vol_min_spread
+        spread = self.vol_min_spread + spread_span * factor
+        return max(1e-6, spread)
