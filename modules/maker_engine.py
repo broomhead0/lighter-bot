@@ -52,6 +52,8 @@ class MakerEngine:
         self.max_size = float(maker_cfg.get("size_max", self.base_size * 1.3))
         if self.min_size > self.max_size:
             self.min_size, self.max_size = self.max_size, self.min_size
+        self.exchange_min_size = float(maker_cfg.get("exchange_min_size", 0.001))
+        self.min_size = max(self.min_size, self.exchange_min_size)
         self.inventory_soft_cap = float(
             maker_cfg.get("inventory_soft_cap", self.base_size * 100)
         )
@@ -126,6 +128,15 @@ class MakerEngine:
                         "[maker] CHAOS: forcing cancel (testing cancel discipline)"
                     )
                     self._record_cancel()
+
+                if quote_size < self.exchange_min_size:
+                    LOG.info(
+                        "[maker] skipping quote refresh (size %.6f below exchange min %.6f)",
+                        quote_size,
+                        self.exchange_min_size,
+                    )
+                    await asyncio.sleep(self.refresh_seconds)
+                    continue
 
                 await self._post_quotes(bid, ask, quote_size)
 
@@ -236,6 +247,8 @@ class MakerEngine:
             except Exception:
                 size = self.base_size
         size = min(max_size, max(min_size, size))
+        if size < self.exchange_min_size:
+            size = self.exchange_min_size
         if getattr(self, "telemetry", None):
             try:
                 self.telemetry.set_gauge("maker_quote_size", float(size))

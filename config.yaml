@@ -22,8 +22,8 @@ maker:
   loop_delay: 2
   pair: market:1
   size: 0.0008
-  size_min: 0.0005
-  size_max: 0.0014
+  size_min: 0.0010
+  size_max: 0.0016
   inventory_soft_cap: 0.08
   spread_bps: 12
   price_scale: 1       # Override with instrument-specific scaler (e.g. 100)
