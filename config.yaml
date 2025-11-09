@@ -26,7 +26,7 @@ maker:
   size_max: 0.18
   exchange_min_size: 0.10
   inventory_soft_cap: 0.08
-  spread_bps: 12
+  spread_bps: 7
   price_scale: 1       # Override with instrument-specific scaler (e.g. 100)
   size_scale: 1000        # Exchange uses 1e3 base precision
 hedger:
