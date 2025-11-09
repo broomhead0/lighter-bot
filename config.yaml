@@ -20,7 +20,7 @@ maker:
     max_cancels: 30
     max_latency_ms: 2000
   loop_delay: 2
-  pair: market:1
+  pair: market:2
   size: 0.12
   size_min: 0.10
   size_max: 0.18
@@ -115,3 +115,5 @@ account_listener:
   ws:
     url: wss://mainnet.zklighter.elliot.ai/stream
     auth_token: ${WS_AUTH_TOKEN:}
+    accounts:
+      - 366110
