@@ -300,14 +300,15 @@ class AccountListener:
             except Exception as exc:
                 LOG.debug("[account] state.update_inventory failed: %s", exc)
 
+        notional = fill.size * fill.price
+        if fill.role == "maker":
+            fee_actual = notional * self.maker_fee_actual
+            fee_premium = notional * self.maker_fee_premium
+        else:
+            fee_actual = notional * self.taker_fee_actual
+            fee_premium = notional * self.taker_fee_premium
+
         if hasattr(self.state, "record_volume_sample"):
-            notional = fill.size * fill.price
-            if fill.role == "maker":
-                fee_actual = notional * self.maker_fee_actual
-                fee_premium = notional * self.maker_fee_premium
-            else:
-                fee_actual = notional * self.taker_fee_actual
-                fee_premium = notional * self.taker_fee_premium
             try:
                 self.state.record_volume_sample(
                     role=fill.role,
@@ -317,6 +318,13 @@ class AccountListener:
                 )
             except Exception as exc:
                 LOG.debug("[account] record_volume_sample failed: %s", exc)
+
+        quote_delta = -(quantity * fill.price)
+        if hasattr(self.state, "record_cash_flow"):
+            try:
+                self.state.record_cash_flow(quote_delta, fee_actual)
+            except Exception as exc:
+                LOG.debug("[account] record_cash_flow failed: %s", exc)
 
         mid_dec: Optional[Decimal] = None
         if hasattr(self.state, "get_mid"):

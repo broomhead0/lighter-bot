@@ -40,6 +40,14 @@ maker:
     max_size_multiplier: 1.1
     pause_threshold_bps: 30
     resume_threshold_bps: 18
+    resume_inventory_ratio: 0.25
+  trend:
+    enabled: true
+    lookback_seconds: 45
+    threshold_bps: 12
+    resume_threshold_bps: 6
+    extra_spread_bps: 2.5
+    inventory_soft_cap_ratio: 0.6
   exchange_min_notional: 10.5
 hedger:
   enabled: true
@@ -55,6 +63,9 @@ hedger:
   cooldown_seconds: 8.0
   max_attempts: 3
   retry_backoff_seconds: 2.0
+  prefer_passive: true
+  passive_wait_seconds: 1.5
+  passive_offset_bps: 2.0
 fees:
   maker_actual_rate: 0.0
   taker_actual_rate: 0.0

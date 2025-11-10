@@ -80,6 +80,11 @@ class Hedger:
         self.taker_fee_premium = Decimal(str(fees_cfg.get("taker_premium_rate", 0.0002)))
 
         self.dry_run = bool(hedger_cfg.get("dry_run", maker_cfg.get("dry_run", True)))
+        self.prefer_passive = bool(hedger_cfg.get("prefer_passive", True))
+        self.passive_wait_seconds = float(hedger_cfg.get("passive_wait_seconds", 1.0))
+        self.passive_offset_bps = float(
+            hedger_cfg.get("passive_offset_bps", max(1.0, self.price_offset_bps / 2))
+        )
 
         # If taker fees are zero (standard tier), force dry-run to avoid accidental cost.
         if self.taker_fee_actual == Decimal("0") and not self._explicit_dry_run:
@@ -103,6 +108,7 @@ class Hedger:
         self._wake = asyncio.Event()
         self._loop_task: Optional[asyncio.Task] = None
         self._next_allowed_ts = 0.0
+        self._open_passive_orders: set[int] = set()
 
     async def start(self) -> None:
         if self._loop_task or not self.enabled:
@@ -199,6 +205,7 @@ class Hedger:
             size=float(hedge_units),
             price=price,
             mid=mid,
+            abs_inventory=abs_inv,
         )
         if success and self.telemetry and hasattr(self.telemetry, "touch"):
             try:
@@ -224,16 +231,40 @@ class Hedger:
             return max(0.0, mid - offset)
         return mid + offset
 
+    def _passive_price(self, mid: float, side: str) -> float:
+        offset = (self.passive_offset_bps / 10_000.0) * mid
+        if side == "ask":
+            return max(0.0, mid + offset)
+        return max(0.0, mid - offset)
+
     async def _execute_hedge(
         self,
         side: str,
         size: float,
         price: float,
         mid: Optional[float] = None,
+        abs_inventory: Decimal = Decimal("0"),
     ) -> bool:
         size_dec = Decimal(str(size))
         price_dec = Decimal(str(price))
         notional = size_dec * price_dec
+
+        if (
+            self.prefer_passive
+            and not self.dry_run
+            and self._trading_client
+            and mid is not None
+        ):
+            mid_dec = Decimal(str(mid))
+            passive_success = await self._execute_passive_hedge(
+                side=side,
+                size=size_dec,
+                mid=mid_dec,
+                abs_inventory=abs_inventory,
+            )
+            if passive_success:
+                self._record_simulated_slippage(notional, Decimal("0"))
+                return True
         fee_actual = notional * self.taker_fee_actual
         fee_premium = notional * self.taker_fee_premium
         slip_value: Optional[Decimal] = None
@@ -324,6 +355,81 @@ class Hedger:
             f"Unable to hedge exposure {self.market} size={size} side={side}",
         )
         return False
+
+    async def _execute_passive_hedge(
+        self,
+        side: str,
+        size: Decimal,
+        mid: Decimal,
+        abs_inventory: Decimal,
+    ) -> bool:
+        if not self._trading_client:
+            return False
+
+        passive_price = self._passive_price(float(mid), side)
+        try:
+            await self._trading_client.ensure_ready()
+            order = await self._trading_client.create_post_only_limit(
+                market=self.market,
+                side=side,
+                price=passive_price,
+                size=float(size),
+                reduce_only=True,
+            )
+        except Exception as exc:
+            LOG.debug("[hedger] passive hedge placement failed: %s", exc)
+            return False
+
+        client_index = int(order.client_order_index)
+        self._open_passive_orders.add(client_index)
+        LOG.info(
+            "[hedger] resting passive %s order idx=%s size=%.6f price=%.4f",
+            side,
+            client_index,
+            float(size),
+            passive_price,
+        )
+
+        deadline = time.time() + self.passive_wait_seconds
+        success = False
+        start_abs = abs_inventory
+
+        while time.time() < deadline and not self._stop.is_set():
+            await asyncio.sleep(0.3)
+            current = None
+            if self.state and hasattr(self.state, "get_inventory"):
+                try:
+                    current = self.state.get_inventory(self.market)
+                except Exception:
+                    current = None
+            if current is None:
+                continue
+            try:
+                current_abs = abs(Decimal(str(current)))
+            except Exception:
+                continue
+            if current_abs <= self.trigger_units:
+                success = True
+                break
+            if start_abs - current_abs >= size * Decimal("0.6"):
+                success = True
+                break
+
+        if not success:
+            try:
+                await self._trading_client.cancel_order(
+                    market=self.market, client_order_index=client_index
+                )
+            except Exception as exc:
+                LOG.debug("[hedger] passive hedge cancel failed: %s", exc)
+            finally:
+                self._open_passive_orders.discard(client_index)
+            LOG.debug("[hedger] passive hedge timed out; falling back to aggressive")
+            return False
+
+        self._open_passive_orders.discard(client_index)
+        LOG.info("[hedger] passive hedge filled for idx=%s", client_index)
+        return True
 
     async def _alert(self, level: str, title: str, message: str) -> None:
         if self.alerts and hasattr(self.alerts, level):

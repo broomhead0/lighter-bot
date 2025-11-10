@@ -4,8 +4,9 @@ import logging
 import math
 import random
 import time
+from collections import deque
 from decimal import Decimal
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Deque, Dict, Optional, Tuple
 
 from core.trading_client import TradingClient, TradingConfig
 
@@ -86,12 +87,28 @@ class MakerEngine:
             )
         self.vol_pause_threshold = float(vol_cfg.get("pause_threshold_bps", 35.0))
         self.vol_resume_threshold = float(vol_cfg.get("resume_threshold_bps", 25.0))
+        self.vol_resume_inventory_ratio = float(
+            vol_cfg.get("resume_inventory_ratio", 0.25)
+        )
         self.vol_half_life = max(float(vol_cfg.get("ema_halflife_seconds", 30.0)), 1.0)
         self._volatility_ema: Optional[float] = None
         self._volatility_last_mid: Optional[float] = None
         self._volatility_last_ts: float = time.time()
         self._volatility_paused = False
         self._latest_volatility_bps: float = 0.0
+        self._volatility_paused_since: Optional[float] = None
+
+        trend_cfg = maker_cfg.get("trend") or {}
+        self.trend_enabled = bool(trend_cfg.get("enabled", False))
+        self.trend_lookback = float(trend_cfg.get("lookback_seconds", 30.0))
+        self.trend_threshold_bps = float(trend_cfg.get("threshold_bps", 15.0))
+        self.trend_hysteresis_bps = float(trend_cfg.get("resume_threshold_bps", 8.0))
+        self.trend_extra_spread_bps = float(trend_cfg.get("extra_spread_bps", 3.0))
+        self.trend_inventory_ratio = float(
+            trend_cfg.get("inventory_soft_cap_ratio", 0.7)
+        )
+        self._trend_samples: Deque[Tuple[float, float]] = deque(maxlen=256)
+        self._trend_state: str = "neutral"
 
         # Cancel discipline tracking
         limits_cfg = maker_cfg.get("limits") or {}
@@ -134,14 +151,19 @@ class MakerEngine:
 
                 if self.vol_enabled and self._volatility_paused:
                     LOG.debug(
-                        "[maker] skipping quotes due to high volatility (%.2fbps)",
+                        "[maker] skipping quotes due to high volatility/inventory (%.2fbps)",
                         volatility_bps,
                     )
+                    await self._cancel_all_orders()
                     self._touch_quote()
                     await asyncio.sleep(self.refresh_seconds)
                     continue
 
-                bid, ask, spread = self._compute_quotes(mid, volatility_bps)
+                trend_bias, extra_spread = self._update_trend_state(mid)
+
+                bid, ask, spread = self._compute_quotes(
+                    mid, volatility_bps, extra_spread_bps=extra_spread
+                )
                 quote_size = self._compute_quote_size(volatility_bps)
 
                 # Check cancel discipline (throttle if exceeded)
@@ -179,7 +201,21 @@ class MakerEngine:
                     await asyncio.sleep(self.refresh_seconds)
                     continue
 
-                await self._post_quotes(bid, ask, quote_size)
+                place_bid = trend_bias in ("both", "bid")
+                place_ask = trend_bias in ("both", "ask")
+                if not place_bid and not place_ask:
+                    LOG.debug("[maker] trend filter skipping both sides")
+                    await self._cancel_all_orders()
+                    await asyncio.sleep(self.refresh_seconds)
+                    continue
+
+                await self._post_quotes(
+                    bid,
+                    ask,
+                    quote_size,
+                    place_bid=place_bid,
+                    place_ask=place_ask,
+                )
 
                 # touch heartbeat for M7 watchdogs
                 self._touch_quote()
@@ -223,9 +259,15 @@ class MakerEngine:
         return None
 
     def _compute_quotes(
-        self, mid: float, volatility_bps: Optional[float] = None
+        self,
+        mid: float,
+        volatility_bps: Optional[float] = None,
+        *,
+        extra_spread_bps: float = 0.0,
     ) -> Tuple[float, float, float]:
-        base_spread = self._spread_for_volatility(volatility_bps)
+        base_spread = self._spread_for_volatility(volatility_bps) + max(
+            0.0, extra_spread_bps
+        )
         jitter = random.uniform(-self.randomize_bps, self.randomize_bps)
         bps = max(1e-6, base_spread + jitter)
 
@@ -238,7 +280,15 @@ class MakerEngine:
         ask = mid + half
         return bid, ask, bps
 
-    async def _post_quotes(self, bid: float, ask: float, size: float):
+    async def _post_quotes(
+        self,
+        bid: float,
+        ask: float,
+        size: float,
+        *,
+        place_bid: bool = True,
+        place_ask: bool = True,
+    ):
         """
         Post maker quotes (bid/ask) as post-only limit orders.
         - Cancel existing orders first
@@ -256,16 +306,20 @@ class MakerEngine:
         # Place new orders if REST client available
         if self._trading_client and not self.cfg.get("maker", {}).get("dry_run", True):
             try:
-                await self._place_order("bid", bid, size)
-                await self._place_order("ask", ask, size)
+                if place_bid:
+                    await self._place_order("bid", bid, size)
+                if place_ask:
+                    await self._place_order("ask", ask, size)
             except Exception as e:
                 LOG.error(f"[maker] failed to place orders: {e}")
                 await self._alert("error", "Order placement failed", str(e))
         else:
             # Dry-run mode: just log
             LOG.debug(
-                "[maker] DRY-RUN: would place bid=%.4f ask=%.4f size=%.6f",
-                bid, ask, size
+                "[maker] DRY-RUN: would place bid=%s ask=%s size=%.6f",
+                f"{bid:.4f}" if place_bid else "skipped",
+                f"{ask:.4f}" if place_ask else "skipped",
+                size,
             )
 
     def _touch_quote(self):
@@ -320,6 +374,89 @@ class MakerEngine:
             except Exception:
                 pass
         return float(size)
+
+    def _current_inventory(self) -> float:
+        if self.state and hasattr(self.state, "get_inventory"):
+            try:
+                inv = self.state.get_inventory(self.market)
+                if inv is not None:
+                    return float(inv)
+            except Exception:
+                return 0.0
+        return 0.0
+
+    def _can_resume_from_pause(self) -> bool:
+        inv_limit = max(1e-9, self.inventory_soft_cap * self.vol_resume_inventory_ratio)
+        current_inv = abs(self._current_inventory())
+        return current_inv <= inv_limit
+
+    def _update_trend_state(self, mid: float) -> Tuple[str, float]:
+        if not self.trend_enabled:
+            return "both", 0.0
+
+        now = time.time()
+        self._trend_samples.append((now, mid))
+        while self._trend_samples and now - self._trend_samples[0][0] > self.trend_lookback:
+            self._trend_samples.popleft()
+
+        if len(self._trend_samples) < 2:
+            self._trend_state = "neutral"
+            return "both", 0.0
+
+        _, oldest_mid = self._trend_samples[0]
+        delta_bps = 0.0
+        if oldest_mid:
+            delta_bps = ((mid - oldest_mid) / max(oldest_mid, 1e-9)) * 10000.0
+
+        previous_state = self._trend_state
+        threshold = self.trend_threshold_bps
+        hysteresis = self.trend_hysteresis_bps
+
+        if self._trend_state == "ask_only":
+            if delta_bps < hysteresis:
+                self._trend_state = "neutral"
+        elif self._trend_state == "bid_only":
+            if delta_bps > -hysteresis:
+                self._trend_state = "neutral"
+
+        if self._trend_state == "neutral":
+            if delta_bps >= threshold:
+                self._trend_state = "ask_only"
+            elif delta_bps <= -threshold:
+                self._trend_state = "bid_only"
+
+        if previous_state != self._trend_state:
+            LOG.info("[maker] trend state -> %s (delta=%.2fbps)", self._trend_state, delta_bps)
+
+        current_inv = self._current_inventory()
+        inv_abs = abs(current_inv)
+        inv_limit = max(1e-9, self.inventory_soft_cap * self.trend_inventory_ratio)
+        bias = "both"
+        extra_spread = 0.0
+
+        if self._trend_state == "ask_only":
+            if inv_abs > inv_limit and current_inv < 0:
+                bias = "both"
+            else:
+                bias = "ask"
+                extra_spread = self.trend_extra_spread_bps
+        elif self._trend_state == "bid_only":
+            if inv_abs > inv_limit and current_inv > 0:
+                bias = "both"
+            else:
+                bias = "bid"
+                extra_spread = self.trend_extra_spread_bps
+
+        if self.telemetry:
+            try:
+                states = {"both": 0.0, "ask": 1.0, "bid": -1.0}
+                self.telemetry.set_gauge(
+                    "maker_trend_bias", states.get(bias, 0.0)
+                )
+            except Exception:
+                pass
+
+        return bias, extra_spread
 
     async def _alert(self, level: str, title: str, message: str = ""):
         if getattr(self, "alerts", None) and hasattr(self.alerts, level):
@@ -500,18 +637,23 @@ class MakerEngine:
             was_paused = self._volatility_paused
             if not self._volatility_paused and vol >= self.vol_pause_threshold:
                 self._volatility_paused = True
+                self._volatility_paused_since = time.time()
                 LOG.warning(
                     "[maker] volatility %.2fbps above pause threshold %.2fbps; pausing quotes",
                     vol,
                     self.vol_pause_threshold,
                 )
             elif self._volatility_paused and vol <= self.vol_resume_threshold:
-                self._volatility_paused = False
-                LOG.info(
-                    "[maker] volatility %.2fbps below resume threshold %.2fbps; resuming quotes",
-                    vol,
-                    self.vol_resume_threshold,
-                )
+                if self._can_resume_from_pause():
+                    self._volatility_paused = False
+                    LOG.info(
+                        "[maker] volatility %.2fbps below resume threshold %.2fbps; resuming quotes",
+                        vol,
+                        self.vol_resume_threshold,
+                    )
+                    self._volatility_paused_since = None
+            if self._volatility_paused and self._volatility_paused_since is None:
+                self._volatility_paused_since = time.time()
             if was_paused != self._volatility_paused and self.telemetry:
                 LOG.debug(
                     "[maker] volatility pause state changed: %s",

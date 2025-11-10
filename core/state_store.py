@@ -53,6 +53,8 @@ class StateStore:
             "maker_edge": Decimal("0"),
             "taker_slippage": Decimal("0"),
         }
+        self._pnl_realized_quote = Decimal("0")
+        self._pnl_fees_paid = Decimal("0")
 
     # -------- Mids ----------
     def set_mid(self, market_id: str, price: float) -> None:
@@ -168,12 +170,32 @@ class StateStore:
     def record_taker_slippage(self, value: Decimal) -> None:
         self._pnl_stats["taker_slippage"] += Decimal(str(value))
 
+    def record_cash_flow(self, quote_delta: Decimal, fee_paid: Decimal) -> None:
+        self._pnl_realized_quote += Decimal(str(quote_delta)) - Decimal(str(fee_paid))
+        self._pnl_fees_paid += Decimal(str(fee_paid))
+
     def get_pnl_stats(self) -> Dict[str, float]:
         return {key: float(val) for key, val in self._pnl_stats.items()}
 
     def reset_pnl_stats(self) -> None:
         self._pnl_stats["maker_edge"] = Decimal("0")
         self._pnl_stats["taker_slippage"] = Decimal("0")
+
+    def get_portfolio_metrics(self) -> Dict[str, float]:
+        realized = float(self._pnl_realized_quote)
+        fees = float(self._pnl_fees_paid)
+        unrealized = 0.0
+        for market, inv in self._inventory.items():
+            mid = self._mids.get(market)
+            if mid is not None:
+                unrealized += float(inv) * float(mid)
+        total = realized + unrealized
+        return {
+            "realized_quote": realized,
+            "unrealized_quote": float(unrealized),
+            "total_quote": float(total),
+            "fees_paid": fees,
+        }
 
     # -------- Time ----------
     def now(self) -> float:

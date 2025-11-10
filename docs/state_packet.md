@@ -11,9 +11,11 @@
   - `maker.size` 0.064 (`size_min` 0.061, `size_max` 0.072)
   - `maker.price_scale` 1000, `maker.size_scale` 1000
   - `maker.exchange_min_notional` 10.5 (keeps base >= exchange minimum)
+  - `maker.volatility` block enabled (EMA halflife 30 s, pause at 30 bps, resume at 18 bps, inventory ratio 0.25)
+  - `maker.trend` filter active (45 s lookback, 12 bps trigger) — widens spreads & quotes one-sided when the tape trends
   - `hedger.dry_run` false, `trigger_units` 0.07, `max_clip_units` 0.04, `price_offset_bps` 6
+  - `hedger` prefers passive exits (`prefer_passive` true, wait 1.5 s, 2 bps offset)
   - `guard.max_position_units` 0.2, `guard.max_inventory_notional` 35
-  - `maker.volatility` block enabled (EMA halflife 30s, pause at 30 bps, resume at 18 bps)
 - **Environment expectations**:
   - `WS_AUTH_TOKEN` stored in Railway & `.env.ws_token` (regenerate with `scripts/refresh_ws_token.py`)
   - `LIGHTER_API_BEARER` exported locally when running REST scripts

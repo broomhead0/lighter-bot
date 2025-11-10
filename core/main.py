@@ -941,6 +941,13 @@ async def main():
                             logging.getLogger("telemetry").debug("pnl persist failed: %s", exc)
                 except Exception as exc:
                     logging.getLogger("telemetry").debug("pnl stats update failed: %s", exc)
+            if state and hasattr(state, "get_portfolio_metrics"):
+                try:
+                    portfolio = state.get_portfolio_metrics()
+                    for key, value in portfolio.items():
+                        telemetry.set_gauge(f"portfolio_{key}", float(value))
+                except Exception as exc:
+                    logging.getLogger("telemetry").debug("portfolio metrics failed: %s", exc)
             await asyncio.sleep(5.0)
 
     tasks.append(asyncio.create_task(periodic_core_metrics(), name="metrics"))
