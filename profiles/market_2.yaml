@@ -1,0 +1,29 @@
+market: market:2
+symbol: SOL
+maker:
+  size: 0.065
+  size_min: 0.06
+  size_max: 0.07
+  exchange_min_size: 0.06
+  inventory_soft_cap: 0.14
+  spread_bps: 7.0
+  price_scale: 1000
+  size_scale: 1000
+  volatility: null
+hedger:
+  trigger_units: 0.11
+  target_units: 0.03
+  max_clip_units: 0.06
+  trigger_notional: 18.51
+  price_offset_bps: null
+  max_slippage_bps: null
+guard:
+  max_position_units: 0.28
+  max_inventory_notional: 47.105520000000006
+  price_band_bps: null
+metadata:
+  initial_margin_bps: 666
+  maintenance_margin_bps: 240
+  exchange_min_notional: 10.0
+  min_quote_amount: 10.0
+  min_base_amount: 0.05

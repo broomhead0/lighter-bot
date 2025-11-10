@@ -20,39 +20,39 @@ maker:
     max_cancels: 30
     max_latency_ms: 2000
   loop_delay: 2
-  pair: market:102
-  size: 1.5
-  size_min: 1.36
-  size_max: 1.63
-  exchange_min_size: 1.36
-  inventory_soft_cap: 1.36
-  spread_bps: 7
-  price_scale: 10000
-  size_scale: 100
+  pair: market:2
+  size: 0.065
+  size_min: 0.06
+  size_max: 0.09
+  exchange_min_size: 0.06
+  inventory_soft_cap: 0.14
+  spread_bps: 7.0
+  price_scale: 1000
+  size_scale: 1000
   volatility:
     enabled: true
     low_bps: 5
     high_bps: 25
     ema_halflife_seconds: 30
-    min_spread_bps: 5
-    max_spread_bps: 14
-    min_size_multiplier: 0.5
-    max_size_multiplier: 1.0
-    pause_threshold_bps: 35
-    resume_threshold_bps: 20
+    min_spread_bps: 6
+    max_spread_bps: 12
+    min_size_multiplier: 0.7
+    max_size_multiplier: 1.1
+    pause_threshold_bps: 30
+    resume_threshold_bps: 18
   exchange_min_notional: 10.0
 hedger:
   enabled: true
   dry_run: false
-  market: market:102
-  trigger_units: 1.36
-  trigger_notional: 10.2
-  target_units: 0.23
-  max_clip_units: 1.36
-  price_offset_bps: 6
-  max_slippage_bps: 8
+  market: market:2
+  trigger_units: 0.11
+  trigger_notional: 12.0
+  target_units: 0.03
+  max_clip_units: 0.05
+  price_offset_bps: 4
+  max_slippage_bps: 7
   poll_interval_seconds: 1.0
-  cooldown_seconds: 12.0
+  cooldown_seconds: 8.0
   max_attempts: 3
   retry_backoff_seconds: 2.0
 fees:
@@ -108,8 +108,8 @@ watchdogs:
 guard:
   price_band_bps: 35
   crossed_book_protection: true
-  max_position_units: 20
-  max_inventory_notional: 150
+  max_position_units: 0.28
+  max_inventory_notional: 47.105520000000006
   kill_on_crossed_book: true
   kill_on_inventory_breach: true
   backoff_seconds_on_block: 5
