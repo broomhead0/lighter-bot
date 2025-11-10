@@ -21,11 +21,11 @@ maker:
     max_latency_ms: 2000
   loop_delay: 2
   pair: market:2
-  size: 0.065
+  size: 0.06
   size_min: 0.06
-  size_max: 0.09
+  size_max: 0.075
   exchange_min_size: 0.06
-  inventory_soft_cap: 0.14
+  inventory_soft_cap: 0.12
   spread_bps: 7.0
   price_scale: 1000
   size_scale: 1000
@@ -45,11 +45,11 @@ hedger:
   enabled: true
   dry_run: false
   market: market:2
-  trigger_units: 0.11
-  trigger_notional: 12.0
-  target_units: 0.03
-  max_clip_units: 0.05
-  price_offset_bps: 4
+  trigger_units: 0.08
+  trigger_notional: 8.5
+  target_units: 0.0
+  max_clip_units: 0.045
+  price_offset_bps: 3
   max_slippage_bps: 7
   poll_interval_seconds: 1.0
   cooldown_seconds: 8.0
@@ -108,8 +108,8 @@ watchdogs:
 guard:
   price_band_bps: 35
   crossed_book_protection: true
-  max_position_units: 0.28
-  max_inventory_notional: 47.105520000000006
+  max_position_units: 0.2
+  max_inventory_notional: 35.0
   kill_on_crossed_book: true
   kill_on_inventory_breach: true
   backoff_seconds_on_block: 5

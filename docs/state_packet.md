@@ -8,11 +8,11 @@
   - `modules/hedger.py` – hedges toward `target_units`, respects `max_slippage_bps`
   - `modules/self_trade_guard.py` – guard rails activated via `guard.*` config
 - **Critical Config (`config.yaml`)**:
-  - `maker.size` 0.065 (`size_min` 0.06, `size_max` 0.09)
+  - `maker.size` 0.06 (`size_min` 0.06, `size_max` 0.075)
   - `maker.price_scale` 1000, `maker.size_scale` 1000
   - `maker.exchange_min_notional` 10.0 (meets SOL minimum)
-  - `hedger.dry_run` false, `trigger_units` 0.11, `max_clip_units` 0.05, `price_offset_bps` 4
-  - `guard.max_position_units` 0.28, `guard.max_inventory_notional` 47.1
+  - `hedger.dry_run` false, `trigger_units` 0.08, `max_clip_units` 0.045, `price_offset_bps` 3
+  - `guard.max_position_units` 0.2, `guard.max_inventory_notional` 35
   - `maker.volatility` block enabled (EMA halflife 30s, pause at 30 bps, resume at 18 bps)
 - **Environment expectations**:
   - `WS_AUTH_TOKEN` stored in Railway & `.env.ws_token` (regenerate with `scripts/refresh_ws_token.py`)
