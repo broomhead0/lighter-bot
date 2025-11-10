@@ -31,11 +31,12 @@
    - `periodic_core_metrics` calls compositor every 10s, pushes gauges prefixed with `metrics_*`.
    - Telemetry now reports both cumulative and 6h rolling stats by default.
 
-5. **CLI tooling (`scripts/metrics.py`)**
+5. **CLI tooling (`scripts/metrics_tool.py`)**
    - `dump` – show current totals (matching telemetry).
    - `window` – compute stats for a custom period.
    - `reset` – archive existing ledger (with confirmation) to start fresh.
    - `export` – write CSV for external analysis.
+   - `import-json` – backfill trades exported via `fetch_trades.py --output`.
    - `compare` – (future) cross-check vs REST API summary.
 
 6. **Persistence & Safety**

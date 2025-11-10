@@ -15,6 +15,7 @@ import argparse
 import json
 import sys
 import time
+from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
@@ -24,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
-from metrics import MetricsCompositor, MetricsLedger  # noqa: E402
+from metrics import FillEvent, MetricsCompositor, MetricsLedger  # noqa: E402
 
 
 DEFAULT_CONFIG_PATH = ROOT / "config.yaml"
@@ -118,6 +119,91 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_trades_from_file(path: Path) -> list[dict]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data, dict) and "trades" in data:
+        trades = data["trades"]
+    elif isinstance(data, list):
+        trades = data
+    else:
+        raise ValueError("unsupported JSON structure; expected list or {\"trades\": [...]}")
+    if not isinstance(trades, list):
+        raise ValueError("trades must be a list")
+    return trades
+
+
+def _derive_role(trade: dict, account_index: int) -> tuple[str, str]:
+    ask_account = trade.get("ask_account_id") or trade.get("ask_account")
+    bid_account = trade.get("bid_account_id") or trade.get("bid_account")
+    maker_is_ask = bool(trade.get("is_maker_ask"))
+    side = "ask"
+    role = "taker"
+    if ask_account is not None and int(ask_account) == account_index:
+        side = "ask"
+        role = "maker" if maker_is_ask else "taker"
+    elif bid_account is not None and int(bid_account) == account_index:
+        side = "bid"
+        role = "maker" if not maker_is_ask else "taker"
+    return role, side
+
+
+def _normalise_timestamp(ts: float) -> float:
+    if ts > 1e12:  # milliseconds
+        return ts / 1000.0
+    return ts
+
+
+def cmd_import_json(args: argparse.Namespace) -> int:
+    cfg = load_config(Path(args.config))
+    account_index = args.account_index or (cfg.get("api") or {}).get("account_index")
+    if account_index is None:
+        print("error: account index missing (pass --account-index or set api.account_index)", file=sys.stderr)
+        return 2
+    trades = _load_trades_from_file(Path(args.input))
+    ledger = _ledger_from_config(cfg)
+    existing_ids = {
+        event.trade_id
+        for event in ledger.iter_events()
+        if event.trade_id is not None
+    }
+    appended = 0
+
+    for trade in sorted(trades, key=lambda x: x.get("timestamp", 0)):
+        trade_id = trade.get("trade_id")
+        if trade_id is not None and trade_id in existing_ids:
+            continue
+        role, side = _derive_role(trade, int(account_index))
+        size = Decimal(str(trade.get("size") or trade.get("base_amount") or trade.get("quantity") or "0"))
+        price = Decimal(str(trade.get("price") or trade.get("mark_price") or "0"))
+        notional = Decimal(str(trade.get("usd_amount") or trade.get("notional") or trade.get("trade_value") or size * price))
+
+        base_delta = size if side == "bid" else -size
+        quote_delta = -base_delta * price
+        fee = Decimal(str(trade.get("maker_fee") or trade.get("taker_fee") or "0"))
+        mid = trade.get("mid_price")
+
+        event = FillEvent(
+            timestamp=_normalise_timestamp(float(trade.get("timestamp", time.time()))),
+            market=f"market:{trade.get('market_id') or trade.get('market')}",
+            role=role,
+            side=side,
+            size=str(size),
+            price=str(price),
+            notional=str(notional),
+            base_delta=str(base_delta),
+            quote_delta=str(quote_delta),
+            fee_paid=str(fee),
+            mid_price=str(mid) if mid is not None else None,
+            trade_id=int(trade_id) if trade_id is not None else None,
+            source="backfill",
+        )
+        ledger.append(event)
+        appended += 1
+
+    print(f"imported {appended} trades into ledger")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Metrics CLI for Lighter bot")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Path to config.yaml")
@@ -140,6 +226,15 @@ def build_parser() -> argparse.ArgumentParser:
     export_p.add_argument("--output", required=True, help="Destination CSV file")
     export_p.add_argument("--hours", type=float, help="Optional hours window to limit export")
     export_p.set_defaults(func=cmd_export)
+
+    import_p = sub.add_parser("import-json", help="Import trades from JSON into ledger")
+    import_p.add_argument("--input", required=True, help="Path to trades JSON file (list or {\"trades\": [...]})")
+    import_p.add_argument(
+        "--account-index",
+        type=int,
+        help="Override account index (defaults to api.account_index from config)",
+    )
+    import_p.set_defaults(func=cmd_import_json)
 
     return parser
 

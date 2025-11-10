@@ -4,7 +4,7 @@ alerts:
 api:
   base_url: http://127.0.0.1:8787
   key: ''
-  account_index: null
+  account_index: 366110
   api_key_index: null
   max_api_key_index: null
   nonce_management: null
