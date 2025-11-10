@@ -77,6 +77,7 @@ class AccountListener:
 
         # optional markets for filtering inventory updates
         maker_cfg = (self.cfg.get("maker") or {}) if isinstance(self.cfg.get("maker"), dict) else {}
+        self.default_market = maker_cfg.get("pair") if isinstance(maker_cfg.get("pair"), str) else None
         default_market = maker_cfg.get("pair")
         if isinstance(default_market, str) and default_market.startswith("market:"):
             self.market_filter = [default_market]
@@ -86,6 +87,10 @@ class AccountListener:
         api_cfg = self.cfg.get("api", {}) if isinstance(self.cfg.get("api"), dict) else {}
         acct_idx = api_cfg.get("account_index")
         self.account_index = str(acct_idx) if acct_idx is not None else None
+        try:
+            self._account_index_int: Optional[int] = int(acct_idx) if acct_idx is not None else None
+        except Exception:
+            self._account_index_int = None
         if hasattr(self.state, "set_account_index"):
             try:
                 self.state.set_account_index(self.account_index)
@@ -200,8 +205,17 @@ class AccountListener:
                     self._handle_trade_entry(entry)
         positions = obj.get("positions")
         if isinstance(positions, dict):
+            seen: set[str] = set()
             for market_id, entry in positions.items():
                 self._handle_position_entry(market_id, entry)
+                seen.add(str(market_id))
+            for market in self._tracked_markets():
+                key = market.split(":", 1)[-1]
+                if key not in seen:
+                    self._reset_position(market)
+        else:
+            for market in self._tracked_markets():
+                self._reset_position(market)
 
     def _handle_trade_entry(self, entry: Dict[str, Any]) -> None:
         market_id = entry.get("market_id")
@@ -286,24 +300,16 @@ class AccountListener:
     def _update_state(self, fill: FillRecord) -> None:
         if not self.state:
             return
-        side_lower = fill.side.lower()
-        quantity = Decimal("0")
-        if side_lower.startswith("open long"):
-            quantity = Decimal(fill.size)
-        elif side_lower.startswith("close long"):
-            quantity = -Decimal(fill.size)
-        elif side_lower.startswith("open short"):
-            quantity = -Decimal(fill.size)
-        elif side_lower.startswith("close short"):
-            quantity = Decimal(fill.size)
-        else:
-            # Fallback: assume positive size increases exposure
-            quantity = Decimal(fill.size)
+        base_delta = self._compute_base_delta(fill)
+        try:
+            fill.side = "bid" if base_delta > 0 else "ask"
+        except Exception:
+            pass
 
         # Update inventory
         if hasattr(self.state, "update_inventory"):
             try:
-                self.state.update_inventory(fill.market, quantity)
+                self.state.update_inventory(fill.market, base_delta)
             except Exception as exc:
                 LOG.debug("[account] state.update_inventory failed: %s", exc)
 
@@ -326,7 +332,7 @@ class AccountListener:
             except Exception as exc:
                 LOG.debug("[account] record_volume_sample failed: %s", exc)
 
-        quote_delta = -(quantity * fill.price)
+        quote_delta = -(base_delta * fill.price)
         if hasattr(self.state, "record_cash_flow"):
             try:
                 self.state.record_cash_flow(quote_delta, fee_actual)
@@ -351,11 +357,11 @@ class AccountListener:
                     timestamp=fill.timestamp,
                     market=fill.market,
                     role=fill.role,
-                    side=fill.side,
+                    side="bid" if base_delta > 0 else "ask",
                     size=str(fill.size),
                     price=str(fill.price),
                     notional=str(notional),
-                    base_delta=str(quantity),
+                    base_delta=str(base_delta),
                     quote_delta=str(quote_delta),
                     fee_paid=str(fee_actual),
                     mid_price=mid_value,
@@ -399,6 +405,7 @@ class AccountListener:
             return
         position = entry.get("position")
         if position is None:
+            self._reset_position(market)
             return
         try:
             value = Decimal(str(position))
@@ -414,6 +421,57 @@ class AccountListener:
                     value = -value
         except Exception:
             pass
+        self._set_inventory(market, value)
+
+    def _compute_base_delta(self, fill: FillRecord) -> Decimal:
+        size = Decimal(fill.size)
+        acct_int = self._account_index_int
+
+        def _to_int(value: Any) -> Optional[int]:
+            if value is None:
+                return None
+            try:
+                return int(value)
+            except Exception:
+                return None
+
+        ask_account = _to_int(fill.raw.get("ask_account_id") or fill.raw.get("ask_account"))
+        bid_account = _to_int(fill.raw.get("bid_account_id") or fill.raw.get("bid_account"))
+
+        if acct_int is not None:
+            if acct_int == ask_account:
+                return -size
+            if acct_int == bid_account:
+                return size
+
+        maker_is_ask = bool(fill.raw.get("is_maker_ask"))
+        role = fill.role.lower()
+
+        if role == "maker":
+            return -size if maker_is_ask else size
+        # role == taker or unknown
+        return size if maker_is_ask else -size
+
+    def _tracked_markets(self) -> list[str]:
+        markets: set[str] = set()
+        if self.market_filter:
+            markets.update(self.market_filter)
+        elif self.state and hasattr(self.state, "get_inventory"):
+            try:
+                inventory = self.state.get_inventory()
+                if isinstance(inventory, dict):
+                    markets.update(inventory.keys())
+            except Exception:
+                pass
+        default_market = getattr(self, "default_market", None)
+        if isinstance(default_market, str):
+            markets.add(default_market)
+        return list(markets)
+
+    def _reset_position(self, market: str) -> None:
+        self._set_inventory(market, Decimal("0"))
+
+    def _set_inventory(self, market: str, value: Decimal) -> None:
         if not self.state or not hasattr(self.state, "set_inventory"):
             return
         try:

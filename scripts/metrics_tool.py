@@ -17,7 +17,7 @@ import sys
 import time
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import yaml
 
@@ -132,19 +132,29 @@ def _load_trades_from_file(path: Path) -> list[dict]:
     return trades
 
 
-def _derive_role(trade: dict, account_index: int) -> tuple[str, str]:
-    ask_account = trade.get("ask_account_id") or trade.get("ask_account")
-    bid_account = trade.get("bid_account_id") or trade.get("bid_account")
+def _derive_role_and_side(trade: dict, account_index: int) -> tuple[str, str]:
     maker_is_ask = bool(trade.get("is_maker_ask"))
-    side = "ask"
-    role = "taker"
-    if ask_account is not None and int(ask_account) == account_index:
-        side = "ask"
-        role = "maker" if maker_is_ask else "taker"
-    elif bid_account is not None and int(bid_account) == account_index:
-        side = "bid"
-        role = "maker" if not maker_is_ask else "taker"
-    return role, side
+
+    def _to_int(value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except Exception:
+            return None
+
+    ask_account = _to_int(trade.get("ask_account_id") or trade.get("ask_account"))
+    bid_account = _to_int(trade.get("bid_account_id") or trade.get("bid_account"))
+
+    if ask_account == account_index:
+        return ("maker" if maker_is_ask else "taker"), "ask"
+    if bid_account == account_index:
+        return ("maker" if not maker_is_ask else "taker"), "bid"
+
+    # Fall back to maker orientation if account IDs are missing
+    if maker_is_ask:
+        return ("maker", "ask")
+    return ("maker", "bid")
 
 
 def _normalise_timestamp(ts: float) -> float:
@@ -175,7 +185,7 @@ def cmd_import_json(args: argparse.Namespace) -> int:
         trade_id = trade.get("trade_id")
         if trade_id is not None and trade_id in existing_ids:
             continue
-        role, side = _derive_role(trade, int(account_index))
+        role, side = _derive_role_and_side(trade, int(account_index))
         size = Decimal(str(trade.get("size") or trade.get("base_amount") or trade.get("quantity") or "0"))
         price = Decimal(str(trade.get("price") or trade.get("mark_price") or "0"))
         notional = Decimal(str(trade.get("usd_amount") or trade.get("notional") or trade.get("trade_value") or size * price))
