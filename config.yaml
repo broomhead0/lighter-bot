@@ -21,10 +21,10 @@ maker:
     max_latency_ms: 2000
   loop_delay: 2
   pair: market:2
-  size: 0.055
-  size_min: 0.05
-  size_max: 0.065
-  exchange_min_size: 0.05
+  size: 0.064
+  size_min: 0.061
+  size_max: 0.072
+  exchange_min_size: 0.061
   inventory_soft_cap: 0.10
   spread_bps: 7.5
   price_scale: 1000
@@ -40,7 +40,7 @@ maker:
     max_size_multiplier: 1.1
     pause_threshold_bps: 30
     resume_threshold_bps: 18
-  exchange_min_notional: 10.0
+  exchange_min_notional: 10.5
 hedger:
   enabled: true
   dry_run: false

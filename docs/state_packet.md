@@ -8,9 +8,9 @@
   - `modules/hedger.py` – hedges toward `target_units`, respects `max_slippage_bps`
   - `modules/self_trade_guard.py` – guard rails activated via `guard.*` config
 - **Critical Config (`config.yaml`)**:
-  - `maker.size` 0.055 (`size_min` 0.05, `size_max` 0.065)
+  - `maker.size` 0.064 (`size_min` 0.061, `size_max` 0.072)
   - `maker.price_scale` 1000, `maker.size_scale` 1000
-  - `maker.exchange_min_notional` 10.0 (meets SOL minimum)
+  - `maker.exchange_min_notional` 10.5 (keeps base >= exchange minimum)
   - `hedger.dry_run` false, `trigger_units` 0.07, `max_clip_units` 0.04, `price_offset_bps` 6
   - `guard.max_position_units` 0.2, `guard.max_inventory_notional` 35
   - `maker.volatility` block enabled (EMA halflife 30s, pause at 30 bps, resume at 18 bps)
