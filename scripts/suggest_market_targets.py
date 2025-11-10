@@ -172,6 +172,10 @@ def main() -> None:
         help="Lighter API base URL (default: %(default)s)",
     )
     parser.add_argument(
+        "--input",
+        help="Optional path to a JSON file containing pre-fetched market data. If provided, network fetch is skipped.",
+    )
+    parser.add_argument(
         "--top",
         type=int,
         default=5,
@@ -182,17 +186,48 @@ def main() -> None:
         action="store_true",
         help="Output JSON instead of a table.",
     )
+    parser.add_argument(
+        "--target-symbol",
+        help="If provided, only show data for this exact market symbol (case-insensitive).",
+    )
     args = parser.parse_args()
 
-    markets = fetch_markets(args.base_url)
+    if args.input:
+        with open(args.input, "r") as fh:
+            loaded = json.load(fh)
+        if isinstance(loaded, dict) and "markets" in loaded:
+            markets = loaded["markets"]
+        elif isinstance(loaded, list):
+            markets = loaded
+        else:
+            raise SystemExit(
+                f"Unsupported JSON shape in {args.input}. Expected list or object with 'markets'."
+            )
+    else:
+        markets = fetch_markets(args.base_url)
     ranked = compute_scores(markets)
-    top_markets = ranked[: args.top]
+
+    if args.target_symbol:
+        symbol_lc = args.target_symbol.lower()
+        ranked = [m for m in ranked if m["symbol"].lower() == symbol_lc]
+        if not ranked:
+            raise SystemExit(
+                f"Target symbol '{args.target_symbol}' not found in market list pulled from {args.base_url}."
+            )
+        top_markets = ranked
+    else:
+        top_markets = ranked[: args.top]
 
     if args.json:
         print(json.dumps(top_markets, indent=2, default=str))
         return
 
-    print(f"Top {len(top_markets)} candidate markets (likely boosts):")
+    header_title = (
+        f"Market snapshot for {args.target_symbol}"
+        if args.target_symbol
+        else f"Top {len(top_markets)} candidate markets (likely boosts):"
+    )
+    print(header_title)
     print(
         f"{'Rank':>4}  {'Market':<12} {'Score':>6}  {'Vol(24h)':>12}  {'OpenInt':>12}  {'Age(h)':>8}"
     )

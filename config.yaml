@@ -3,9 +3,9 @@ alerts:
   enabled: true
 api:
   base_url: http://127.0.0.1:8787
-  key: ''              # API key private key (hex string) – required for live trading
-  account_index: null  # Set when live trading
-  api_key_index: null  # Set when live trading
+  key: ''
+  account_index: null
+  api_key_index: null
   max_api_key_index: null
   nonce_management: null
 app:
@@ -20,15 +20,15 @@ maker:
     max_cancels: 30
     max_latency_ms: 2000
   loop_delay: 2
-  pair: market:2
-  size: 0.12
-  size_min: 0.10
-  size_max: 0.18
-  exchange_min_size: 0.10
-  inventory_soft_cap: 0.08
+  pair: market:102
+  size: 1.5
+  size_min: 1.36
+  size_max: 1.63
+  exchange_min_size: 1.36
+  inventory_soft_cap: 1.36
   spread_bps: 7
-  price_scale: 1       # Override with instrument-specific scaler (e.g. 100)
-  size_scale: 1000        # Exchange uses 1e3 base precision
+  price_scale: 10000
+  size_scale: 100
   volatility:
     enabled: true
     low_bps: 5
@@ -40,25 +40,26 @@ maker:
     max_size_multiplier: 1.0
     pause_threshold_bps: 35
     resume_threshold_bps: 20
+  exchange_min_notional: 10.0
 hedger:
   enabled: true
-  dry_run: false             # temporarily enable live hedging for fee data
-  market: market:2
-  trigger_units: 0.18        # allow a bit more drift before hedging
-  trigger_notional: 25       # hedge once drift exceeds ~$25 notional
-  target_units: 0.03         # drive inventory toward tighter band
-  max_clip_units: 0.03       # hedge smaller clips to limit taker drag
-  price_offset_bps: 6        # keep hedges close to mid to reduce slippage
-  max_slippage_bps: 8        # skip hedges if implied slippage exceeds cap
+  dry_run: false
+  market: market:102
+  trigger_units: 1.36
+  trigger_notional: 10.2
+  target_units: 0.23
+  max_clip_units: 1.36
+  price_offset_bps: 6
+  max_slippage_bps: 8
   poll_interval_seconds: 1.0
   cooldown_seconds: 12.0
   max_attempts: 3
   retry_backoff_seconds: 2.0
 fees:
-  maker_actual_rate: 0.0          # standard tier (no maker fees)
-  taker_actual_rate: 0.0          # standard tier (no taker fees)
-  maker_premium_rate: 0.00002     # 0.002% maker fee in premium tier
-  taker_premium_rate: 0.0002      # 0.02% taker fee in premium tier
+  maker_actual_rate: 0.0
+  taker_actual_rate: 0.0
+  maker_premium_rate: 2.0e-05
+  taker_premium_rate: 0.0002
 optimizer:
   hysteresis_score_margin: 0.05
   max_spread_bps: 25
@@ -107,8 +108,8 @@ watchdogs:
 guard:
   price_band_bps: 35
   crossed_book_protection: true
-  max_position_units: 0.18        # allow ~0.18 SOL (~$30) cushion before kill-switch
-  max_inventory_notional: 35      # cap notional exposure around $35
+  max_position_units: 20
+  max_inventory_notional: 150
   kill_on_crossed_book: true
   kill_on_inventory_breach: true
   backoff_seconds_on_block: 5
@@ -117,7 +118,7 @@ ws:
   max_failures: 3
   url: wss://mainnet.zklighter.elliot.ai/stream
   channels:
-    - "market_stats/all"
+  - market_stats/all
   auth_token: ${WS_AUTH_TOKEN:}
   log_mid_interval_s: 1.0
 account_listener:
@@ -127,4 +128,4 @@ account_listener:
     url: wss://mainnet.zklighter.elliot.ai/stream
     auth_token: ${WS_AUTH_TOKEN:}
     accounts:
-      - 366110
+    - 366110

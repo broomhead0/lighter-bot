@@ -53,6 +53,9 @@ class MakerEngine:
         if self.min_size > self.max_size:
             self.min_size, self.max_size = self.max_size, self.min_size
         self.exchange_min_size = float(maker_cfg.get("exchange_min_size", 0.001))
+        self.exchange_min_notional = float(
+            maker_cfg.get("exchange_min_notional", 0.0)
+        )
         self.min_size = max(self.min_size, self.exchange_min_size)
         self.inventory_soft_cap = float(
             maker_cfg.get("inventory_soft_cap", self.base_size * 100)
@@ -297,6 +300,20 @@ class MakerEngine:
         size = min(max_size, max(min_size, size))
         if size < self.exchange_min_size:
             size = self.exchange_min_size
+        if self.exchange_min_notional > 0.0:
+            mid = None
+            if self.state and hasattr(self.state, "get_mid"):
+                try:
+                    mid_val = self.state.get_mid(self.market)
+                    if mid_val:
+                        mid = float(mid_val)
+                except Exception:
+                    mid = None
+            if mid:
+                min_units = self.exchange_min_notional / mid
+                if size * mid < self.exchange_min_notional:
+                    size = max(size, min_units)
+                    size = min(max_size, max(min_size, size))
         if getattr(self, "telemetry", None):
             try:
                 self.telemetry.set_gauge("maker_quote_size", float(size))

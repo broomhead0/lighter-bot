@@ -49,13 +49,18 @@ def to_decimal(value: object) -> Optional[Decimal]:
         return None
 
 
-def summarise_trades(trades: Iterable[Mapping[str, object]], account_index: int) -> Mapping[str, object]:
+def summarise_trades(
+    trades: Iterable[Mapping[str, object]],
+    account_index: int,
+) -> Mapping[str, object]:
     maker_pnl = Decimal("0")
     taker_pnl = Decimal("0")
     maker_notional = Decimal("0")
     taker_notional = Decimal("0")
     maker_count = 0
     taker_count = 0
+    quote_cash_flow = Decimal("0")  # positive when we receive quote (sell), negative when we spend quote
+    net_base = Decimal("0")  # positive net base held
 
     for trade in trades:
         # Determine our role based on account participation fields.
@@ -90,6 +95,13 @@ def summarise_trades(trades: Iterable[Mapping[str, object]], account_index: int)
         if trade_value is None and size is not None and price is not None:
             trade_value = size * price
 
+        if ask_account == account_index and trade_value is not None and size is not None:
+            quote_cash_flow += trade_value
+            net_base -= size
+        elif bid_account == account_index and trade_value is not None and size is not None:
+            quote_cash_flow -= trade_value
+            net_base += size
+
         if role == "maker":
             maker_count += 1
             if trade_value is not None:
@@ -111,6 +123,8 @@ def summarise_trades(trades: Iterable[Mapping[str, object]], account_index: int)
         "maker_pnl": float(maker_pnl),
         "taker_pnl": float(taker_pnl),
         "net_pnl": float(maker_pnl + taker_pnl),
+        "realized_quote_pnl": float(quote_cash_flow),
+        "net_base_position": float(net_base),
     }
     return summary
 
@@ -125,6 +139,16 @@ def main() -> None:
         "--token",
         type=str,
         help="Bearer token for REST API (falls back to LIGHTER_API_BEARER env var)",
+    )
+    parser.add_argument(
+        "--market-id",
+        type=int,
+        help="Optional market_id filter (e.g. 102)",
+    )
+    parser.add_argument(
+        "--mark-mid",
+        type=float,
+        help="Optional mid price to compute mark-to-market PnL.",
     )
     args = parser.parse_args()
 
@@ -148,6 +172,8 @@ def main() -> None:
         "sort_dir": "desc",
         "auth": token,
     }
+    if args.market_id is not None:
+        params["market_id"] = args.market_id
 
     response = requests.get(url, params=params, timeout=30)
     if response.status_code != 200:
@@ -160,6 +186,16 @@ def main() -> None:
         raise SystemExit("Unexpected response structure: no trades found.")
 
     summary = summarise_trades(trades, int(account))
+
+    if args.mark_mid is not None:
+        mark_mid = Decimal(str(args.mark_mid))
+        realized = Decimal(str(summary["realized_quote_pnl"]))
+        net_base = Decimal(str(summary["net_base_position"]))
+        mark_to_market = net_base * mark_mid
+        total_pnl = realized + mark_to_market
+        summary["mark_price"] = float(mark_mid)
+        summary["mark_to_market"] = float(mark_to_market)
+        summary["total_pnl"] = float(total_pnl)
 
     print(json.dumps(summary, indent=2))
 

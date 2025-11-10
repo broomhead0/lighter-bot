@@ -1,0 +1,39 @@
+market: market:102
+symbol: ICP
+maker:
+  size: 1.5
+  size_min: 1.36
+  size_max: 1.63
+  exchange_min_size: 1.36
+  inventory_soft_cap: 1.36
+  spread_bps: 7
+  price_scale: 10000
+  size_scale: 100
+  volatility:
+    enabled: true
+    low_bps: 5
+    high_bps: 25
+    ema_halflife_seconds: 30
+    min_spread_bps: 5
+    max_spread_bps: 14
+    min_size_multiplier: 0.5
+    max_size_multiplier: 1.0
+    pause_threshold_bps: 35
+    resume_threshold_bps: 20
+hedger:
+  trigger_units: 1.36
+  target_units: 0.23
+  max_clip_units: 1.36
+  trigger_notional: 10.2
+  price_offset_bps: 6
+  max_slippage_bps: 8
+guard:
+  max_position_units: 20
+  max_inventory_notional: 150
+  price_band_bps: 35
+metadata:
+  initial_margin_bps: 2000
+  maintenance_margin_bps: 1200
+  exchange_min_notional: 10.0
+  min_quote_amount: 10.0
+  min_base_amount: 0.6

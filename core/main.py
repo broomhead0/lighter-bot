@@ -183,6 +183,7 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
         (("maker", "randomize_bps"), "MAKER_RANDOMIZE_BPS", "float"),
         (("maker", "price_scale"), "MAKER_PRICE_SCALE", "float"),
         (("maker", "size_scale"), "MAKER_SIZE_SCALE", "float"),
+        (("maker", "exchange_min_notional"), "MAKER_EXCHANGE_MIN_NOTIONAL", "float"),
         (("maker", "limits", "max_cancels"), "MAKER_LIMITS_MAX_CANCELS", "int"),
         (("maker", "limits", "max_latency_ms"), "MAKER_LIMITS_MAX_LATENCY_MS", "int"),
         (("hedger", "enabled"), "HEDGER_ENABLED", "bool"),

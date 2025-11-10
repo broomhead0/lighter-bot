@@ -17,6 +17,7 @@ env/
 .env
 .env.local
 .env.*.local
+.env.ws_token
 
 # IDE
 .vscode/
@@ -29,6 +30,7 @@ env/
 *.log
 logs/*.log
 logs/*.jsonl
+logs/trades/
 run.log
 
 # Data
