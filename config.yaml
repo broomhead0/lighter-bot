@@ -112,6 +112,12 @@ chaos:
 telemetry:
   enabled: true
   port: 9100
+metrics:
+  enabled: true
+  ledger_path: data/metrics/fills.jsonl
+  archive_dir: data/metrics/archive
+  max_bytes: 5242880
+  rolling_window_seconds: 21600
 watchdogs:
   quote_stale_seconds: 20
   reminder_every_seconds: 300

@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Dict, Optional
 
+try:
+    from metrics.ledger import FillEvent
+except Exception:  # pragma: no cover
+    FillEvent = None  # type: ignore
+
 LOG = logging.getLogger("account")
 
 
@@ -41,11 +46,13 @@ class AccountListener:
         state: Any = None,
         hedger: Any = None,
         telemetry: Any = None,
+        metrics_ledger: Any = None,
     ):
         self.cfg = config or {}
         self.state = state
         self.hedger = hedger
         self.telemetry = telemetry
+        self.metrics_ledger = metrics_ledger
         self.debug = bool(self.cfg.get("debug", False))
         if self.debug:
             LOG.setLevel(logging.DEBUG)
@@ -325,6 +332,30 @@ class AccountListener:
                 self.state.record_cash_flow(quote_delta, fee_actual)
             except Exception as exc:
                 LOG.debug("[account] record_cash_flow failed: %s", exc)
+
+        if self.metrics_ledger and FillEvent:
+            try:
+                mid_value = None
+                if mid_dec is not None:
+                    mid_value = str(mid_dec)
+                event = FillEvent(
+                    timestamp=fill.timestamp,
+                    market=fill.market,
+                    role=fill.role,
+                    side=fill.side,
+                    size=str(fill.size),
+                    price=str(fill.price),
+                    notional=str(notional),
+                    base_delta=str(quantity),
+                    quote_delta=str(quote_delta),
+                    fee_paid=str(fee_actual),
+                    mid_price=mid_value,
+                    trade_id=fill.raw.get("trade_id"),
+                    source="account_listener",
+                )
+                self.metrics_ledger.append(event)
+            except Exception as exc:
+                LOG.debug("[account] ledger append failed: %s", exc)
 
         mid_dec: Optional[Decimal] = None
         if hasattr(self.state, "get_mid"):

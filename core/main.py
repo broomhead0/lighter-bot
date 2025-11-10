@@ -8,6 +8,7 @@ import signal
 import sys
 import time
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -78,6 +79,7 @@ except Exception:  # noqa
     Hedger = None  # type: ignore
 
 from modules.alert_manager import AlertManager
+from metrics import MetricsCompositor, MetricsLedger
 from modules.telemetry import Telemetry
 
 # Compat shim from earlier step
@@ -640,6 +642,30 @@ async def main():
 
     # --- Core components ---
     state = StateStore() if StateStore else SimpleNamespace()
+    metrics_cfg = cfg.get("metrics") or {}
+    metrics_enabled = bool(metrics_cfg.get("enabled", True))
+    metrics_ledger = None
+    metrics_compositor = None
+    if metrics_enabled:
+        ledger_path = Path(metrics_cfg.get("ledger_path", "data/metrics/fills.jsonl"))
+        archive_dir = metrics_cfg.get("archive_dir")
+        archive_path = Path(archive_dir) if archive_dir else ledger_path.parent / "archive"
+        max_bytes = metrics_cfg.get("max_bytes")
+        metrics_ledger = MetricsLedger(
+            ledger_path,
+            archive_dir=archive_path,
+            max_bytes=int(max_bytes) if max_bytes is not None else None,
+        )
+
+        def _mid_provider(market: str) -> Optional[float]:
+            if not hasattr(state, "get_mid"):
+                return None
+            try:
+                return state.get_mid(market)
+            except Exception:
+                return None
+
+        metrics_compositor = MetricsCompositor(metrics_ledger, mid_provider=_mid_provider)
     shared_trading_client: Optional[TradingClient] = None
     api_cfg = cfg.get("api") or {}
     maker_cfg = cfg.get("maker") or {}
@@ -790,6 +816,7 @@ async def main():
                     state=state,
                     hedger=hedger,
                     telemetry=telemetry,
+                    metrics_ledger=metrics_ledger,
                 )
                 logging.getLogger("main").info("[main] AccountListener initialized")
             except Exception as exc:
@@ -900,10 +927,19 @@ async def main():
 
     tasks: List[asyncio.Task] = []
 
-    pnl_log_path = os.environ.get("PNL_LOG_PATH", "logs/pnl_stats.jsonl")
-    last_pnl_written = {"maker_edge": 0.0, "taker_slippage": 0.0}
-
     async def periodic_core_metrics():
+        rolling_seconds = int(metrics_cfg.get("rolling_window_seconds", 6 * 3600))
+
+        def publish_snapshot(snapshot, prefix):
+            if not snapshot:
+                return
+            try:
+                data = snapshot.as_dict(prefix=prefix)
+                for key, value in data.items():
+                    telemetry.set_gauge(f"metrics_{key}", float(value))
+            except Exception as exc:
+                logging.getLogger("telemetry").debug("snapshot publish failed: %s", exc)
+
         while not stop_event.is_set():
             telemetry.set_gauge("uptime_seconds", max(0.0, time.time() - start_ts))
             if state and hasattr(state, "get_fee_stats"):
@@ -913,41 +949,28 @@ async def main():
                         telemetry.set_gauge(f"fees_{key}", float(value))
                 except Exception as exc:
                     logging.getLogger("telemetry").debug("fee stats update failed: %s", exc)
-            if state and hasattr(state, "get_pnl_stats"):
+            if metrics_compositor:
                 try:
-                    pnl_stats = state.get_pnl_stats()
-                    for key, value in pnl_stats.items():
-                        telemetry.set_gauge(f"pnl_{key}", float(value))
-                    if any(
-                        abs(pnl_stats.get(k, 0.0) - last_pnl_written.get(k, 0.0)) > 1e-9
-                        for k in last_pnl_written
-                    ):
+                    mids_override = {}
+                    if state and hasattr(state, "get_inventory") and hasattr(state, "get_mid"):
                         try:
-                            os.makedirs(os.path.dirname(pnl_log_path), exist_ok=True)
-                            with open(pnl_log_path, "a", encoding="utf-8") as fh:
-                                record = {
-                                    "timestamp": time.time(),
-                                    "maker_edge": float(pnl_stats.get("maker_edge", 0.0)),
-                                    "taker_slippage": float(pnl_stats.get("taker_slippage", 0.0)),
-                                }
-                                fh.write(json.dumps(record) + "\n")
-                            last_pnl_written.update(
-                                {
-                                    "maker_edge": pnl_stats.get("maker_edge", 0.0),
-                                    "taker_slippage": pnl_stats.get("taker_slippage", 0.0),
-                                }
-                            )
-                        except Exception as exc:
-                            logging.getLogger("telemetry").debug("pnl persist failed: %s", exc)
+                            inv_map = state.get_inventory()
+                            if isinstance(inv_map, dict):
+                                for market in inv_map.keys():
+                                    mid_val = state.get_mid(market)
+                                    if mid_val is not None:
+                                        mids_override[market] = float(mid_val)
+                        except Exception:
+                            mids_override = {}
+                    total_snapshot = metrics_compositor.snapshot(mids_override=mids_override)
+                    rolling_snapshot = metrics_compositor.snapshot(
+                        window_seconds=rolling_seconds,
+                        mids_override=mids_override,
+                    )
+                    publish_snapshot(total_snapshot, "total_")
+                    publish_snapshot(rolling_snapshot, f"rolling_{int(rolling_seconds // 3600)}h_")
                 except Exception as exc:
-                    logging.getLogger("telemetry").debug("pnl stats update failed: %s", exc)
-            if state and hasattr(state, "get_portfolio_metrics"):
-                try:
-                    portfolio = state.get_portfolio_metrics()
-                    for key, value in portfolio.items():
-                        telemetry.set_gauge(f"portfolio_{key}", float(value))
-                except Exception as exc:
-                    logging.getLogger("telemetry").debug("portfolio metrics failed: %s", exc)
+                    logging.getLogger("telemetry").debug("metrics compositor failed: %s", exc)
             await asyncio.sleep(5.0)
 
     tasks.append(asyncio.create_task(periodic_core_metrics(), name="metrics"))

@@ -16,6 +16,7 @@
   - `hedger.dry_run` false, `trigger_units` 0.07, `max_clip_units` 0.04, `price_offset_bps` 6
   - `hedger` prefers passive exits (`prefer_passive` true, wait 1.5 s, 2 bps offset)
   - `guard.max_position_units` 0.2, `guard.max_inventory_notional` 35
+  - `metrics` ledger enabled (`data/metrics/fills.jsonl`, 5 MB rotation, 6 h rolling window)
 - **Environment expectations**:
   - `WS_AUTH_TOKEN` stored in Railway & `.env.ws_token` (regenerate with `scripts/refresh_ws_token.py`)
   - `LIGHTER_API_BEARER` exported locally when running REST scripts
@@ -24,6 +25,7 @@
   - Deploy: `railway up`
   - Tail logs: `railway logs --service lighter-bot --lines 200`
   - Health probe: `railway run --service lighter-bot -- curl -sf http://127.0.0.1:8000/health`
+  - Metrics ledger: `python scripts/metrics_tool.py dump` (or `window --hours 6`, `reset --confirm`)
   - Dump telemetry: `railway ssh --service lighter-bot -- python scripts/dump_metrics.py --filter portfolio_`
   - Generate market profile: `python scripts/set_market.py --symbol SYMBOL --balance-usd 30 --sizing-multiplier 1.1 --profile-out profiles/market_<id>.yaml --activate`
   - Apply profile: `python scripts/apply_profile.py --profile profiles/market_<id>.yaml --config config.yaml --metadata-out data/instruments/market_<id>.json`
