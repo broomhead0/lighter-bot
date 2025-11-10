@@ -333,6 +333,15 @@ class AccountListener:
             except Exception as exc:
                 LOG.debug("[account] record_cash_flow failed: %s", exc)
 
+        mid_dec: Optional[Decimal] = None
+        if hasattr(self.state, "get_mid"):
+            try:
+                mid_val = self.state.get_mid(fill.market)
+                if mid_val is not None:
+                    mid_dec = Decimal(str(mid_val))
+            except Exception:
+                mid_dec = None
+
         if self.metrics_ledger and FillEvent:
             try:
                 mid_value = None
@@ -356,15 +365,6 @@ class AccountListener:
                 self.metrics_ledger.append(event)
             except Exception as exc:
                 LOG.debug("[account] ledger append failed: %s", exc)
-
-        mid_dec: Optional[Decimal] = None
-        if hasattr(self.state, "get_mid"):
-            try:
-                mid_val = self.state.get_mid(fill.market)
-                if mid_val is not None:
-                    mid_dec = Decimal(str(mid_val))
-            except Exception:
-                mid_dec = None
         if mid_dec is not None:
             try:
                 if fill.role == "maker" and hasattr(self.state, "record_maker_edge"):

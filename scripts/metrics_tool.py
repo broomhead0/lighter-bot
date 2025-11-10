@@ -166,6 +166,9 @@ def cmd_import_json(args: argparse.Namespace) -> int:
         for event in ledger.iter_events()
         if event.trade_id is not None
     }
+    fees_cfg = cfg.get("fees") or {}
+    maker_rate = Decimal(str(fees_cfg.get("maker_actual_rate", 0)))
+    taker_rate = Decimal(str(fees_cfg.get("taker_actual_rate", 0)))
     appended = 0
 
     for trade in sorted(trades, key=lambda x: x.get("timestamp", 0)):
@@ -179,7 +182,9 @@ def cmd_import_json(args: argparse.Namespace) -> int:
 
         base_delta = size if side == "bid" else -size
         quote_delta = -base_delta * price
-        fee = Decimal(str(trade.get("maker_fee") or trade.get("taker_fee") or "0"))
+        fee_rate = maker_rate if role == "maker" else taker_rate
+        fee = abs(notional) * fee_rate
+        fee_currency = "quote" if fee != 0 else None
         mid = trade.get("mid_price")
 
         event = FillEvent(
@@ -196,6 +201,7 @@ def cmd_import_json(args: argparse.Namespace) -> int:
             mid_price=str(mid) if mid is not None else None,
             trade_id=int(trade_id) if trade_id is not None else None,
             source="backfill",
+            fee_currency=fee_currency,
         )
         ledger.append(event)
         appended += 1

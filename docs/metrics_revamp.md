@@ -36,7 +36,7 @@
    - `window` – compute stats for a custom period.
    - `reset` – archive existing ledger (with confirmation) to start fresh.
    - `export` – write CSV for external analysis.
-   - `import-json` – backfill trades exported via `fetch_trades.py --output`.
+   - `import-json` – backfill trades exported via `fetch_trades.py --output` (fees derived from `config.fees`).
    - `compare` – (future) cross-check vs REST API summary.
 
 6. **Persistence & Safety**

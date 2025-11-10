@@ -25,7 +25,7 @@
   - Deploy: `railway up`
   - Tail logs: `railway logs --service lighter-bot --lines 200`
   - Health probe: `railway run --service lighter-bot -- curl -sf http://127.0.0.1:8000/health`
-  - Metrics ledger: `python scripts/metrics_tool.py dump` (or `window --hours 6`, `reset --confirm`)
+  - Metrics ledger: `python scripts/metrics_tool.py dump` (or `window --hours 6`, `reset --confirm`, `import-json --input data/metrics/backfill.json`)
   - Dump telemetry: `railway ssh --service lighter-bot -- python scripts/dump_metrics.py --filter portfolio_`
   - Generate market profile: `python scripts/set_market.py --symbol SYMBOL --balance-usd 30 --sizing-multiplier 1.1 --profile-out profiles/market_<id>.yaml --activate`
   - Apply profile: `python scripts/apply_profile.py --profile profiles/market_<id>.yaml --config config.yaml --metadata-out data/instruments/market_<id>.json`

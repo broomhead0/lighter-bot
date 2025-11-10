@@ -39,6 +39,7 @@ class FillEvent:
     base_delta: str
     quote_delta: str
     fee_paid: str
+    fee_currency: Optional[str] = None
     mid_price: Optional[str] = None
     trade_id: Optional[int] = None
     source: str = "account_listener"

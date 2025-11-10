@@ -90,8 +90,11 @@ class MetricsCompositor:
             if snapshot.end_ts is None or event.timestamp > snapshot.end_ts:
                 snapshot.end_ts = event.timestamp
 
-            snapshot.realized_quote += quote_delta - fee_paid
-            snapshot.fees_paid += fee_paid
+            fee_adjusted = fee_paid
+            if getattr(event, "fee_currency", None) == "quote":
+                fee_adjusted = fee_paid
+            snapshot.realized_quote += quote_delta - fee_adjusted
+            snapshot.fees_paid += fee_adjusted
 
             if event.role.lower() == "maker":
                 snapshot.maker_volume += abs(notional)
