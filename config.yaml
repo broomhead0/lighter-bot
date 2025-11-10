@@ -21,12 +21,12 @@ maker:
     max_latency_ms: 2000
   loop_delay: 2
   pair: market:2
-  size: 0.06
-  size_min: 0.06
-  size_max: 0.075
-  exchange_min_size: 0.06
-  inventory_soft_cap: 0.12
-  spread_bps: 7.0
+  size: 0.055
+  size_min: 0.05
+  size_max: 0.065
+  exchange_min_size: 0.05
+  inventory_soft_cap: 0.10
+  spread_bps: 7.5
   price_scale: 1000
   size_scale: 1000
   volatility:
@@ -45,11 +45,11 @@ hedger:
   enabled: true
   dry_run: false
   market: market:2
-  trigger_units: 0.08
-  trigger_notional: 8.5
+  trigger_units: 0.07
+  trigger_notional: 7.0
   target_units: 0.0
-  max_clip_units: 0.045
-  price_offset_bps: 3
+  max_clip_units: 0.04
+  price_offset_bps: 6
   max_slippage_bps: 7
   poll_interval_seconds: 1.0
   cooldown_seconds: 8.0
