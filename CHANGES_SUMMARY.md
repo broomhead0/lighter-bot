@@ -1,3 +1,23 @@
+## 2025-11-10 – Current Strategy Snapshot
+
+- **Goal**: Stay roughly flat PnL while farming SOL points with $500 collateral.
+- **Current State**:
+  - Maker live (override `MAKER_DRY_RUN=false` on Railway).
+  - Hedger live (`dry_run=false`) with tuned clips to keep inventory ≈ 0.
+  - Telemetry + ledger rebuilt; metrics accurate (`scripts/metrics_tool.py`).
+  - Guard/hedger temporarily loosened to flush stray inventory.
+
+- **Key Learnings**:
+  - Ledger importer needed role/side fix; account listener now resets inventory when `positions` block omits a market.
+  - REST backfill requires explicit `--token`; daily reconciliation via `fetch_trades.py` + `metrics_tool.py import-json`.
+  - Guard kill-switch fires on stale inventory; ensure reset logic and guard limits in sync.
+
+- **Plan Going Forward**:
+  1. **Spread bump**: target ~10 bps (adjust `maker.spread_bps` / volatility floor) to capture more edge per fill.
+  2. **Inventory control**: keep hedger at `max_clip_units` ≥ 0.08 while flattening; gradually tighten once mid oscillates under ±0.1 SOL.
+  3. **Trend dead-band**: use 45s EMA to pause the aggressive side during strong trends to avoid taker bleed.
+  4. **Monitor**: Use `metrics_tool.py window --hours 1` (and `--seconds 300`) as truth; intervene if realized PnL drifts < –$5/hr.
+  5. **Points budget**: Once realized wins, earmark small profit slices to cover future premium fees.
 # Code Review & Fixes Summary
 
 ## ✅ Critical Fixes Completed
