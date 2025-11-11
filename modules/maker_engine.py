@@ -68,6 +68,16 @@ class MakerEngine:
         )  # random widen/narrow
         self.allow_synthetic_fallback = bool(maker_cfg.get("synthetic_fallback", False))
 
+        pnl_guard_cfg = maker_cfg.get("pnl_guard") or {}
+        self.pnl_guard_enabled = bool(pnl_guard_cfg.get("enabled", False))
+        self.pnl_guard_max_extra_bps = float(pnl_guard_cfg.get("max_extra_bps", 6.0))
+        self.pnl_guard_min_size_multiplier = float(
+            pnl_guard_cfg.get("min_size_multiplier", 0.6)
+        )
+        self._pnl_guard_spread_extra = 0.0
+        self._pnl_guard_size_multiplier = 1.0
+        self._pnl_guard_expiry_ts = 0.0
+
         vol_cfg = maker_cfg.get("volatility") or {}
         self.vol_enabled = bool(vol_cfg.get("enabled", False))
         self.vol_low_bps = float(vol_cfg.get("low_bps", 5.0))
@@ -135,6 +145,11 @@ class MakerEngine:
                     LOG.warning("[maker] trading client unavailable: %s", exc)
 
         self._stop = asyncio.Event()
+        if self.telemetry and self.pnl_guard_enabled:
+            try:
+                self.telemetry.set_gauge("maker_pnl_guard_active", 0.0)
+            except Exception:
+                pass
 
     async def run(self):
         LOG.info("MakerEngine started for %s", self.market)
@@ -145,6 +160,8 @@ class MakerEngine:
                     LOG.info("[maker] waiting for mid...")
                     await asyncio.sleep(1.0)
                     continue
+
+                self._maybe_expire_pnl_guard()
 
                 volatility_bps = self._update_volatility(mid)
                 self._latest_volatility_bps = volatility_bps
@@ -268,6 +285,8 @@ class MakerEngine:
         base_spread = self._spread_for_volatility(volatility_bps) + max(
             0.0, extra_spread_bps
         )
+        if self.pnl_guard_enabled:
+            base_spread += max(0.0, self._pnl_guard_spread_extra)
         jitter = random.uniform(-self.randomize_bps, self.randomize_bps)
         bps = max(1e-6, base_spread + jitter)
 
@@ -368,6 +387,15 @@ class MakerEngine:
                 if size * mid < self.exchange_min_notional:
                     size = max(size, min_units)
                     size = min(max_size, max(min_size, size))
+        if self.pnl_guard_enabled:
+            guard_multiplier = max(
+                self.pnl_guard_min_size_multiplier,
+                min(1.0, self._pnl_guard_size_multiplier),
+            )
+            size *= guard_multiplier
+            size = min(max_size, max(min_size, size))
+            if size < self.exchange_min_size:
+                size = self.exchange_min_size
         if getattr(self, "telemetry", None):
             try:
                 self.telemetry.set_gauge("maker_quote_size", float(size))
@@ -601,6 +629,71 @@ class MakerEngine:
         except Exception as exc:
             LOG.warning("[maker] invalid trading config: %s", exc)
             return None
+
+    def _maybe_expire_pnl_guard(self) -> None:
+        if not self.pnl_guard_enabled:
+            return
+        if self._pnl_guard_expiry_ts and time.time() > self._pnl_guard_expiry_ts:
+            if self._pnl_guard_spread_extra > 0 or self._pnl_guard_size_multiplier < 0.999:
+                LOG.info("[maker] PnL guard expired; restoring baseline sizes/spread")
+            self._pnl_guard_spread_extra = 0.0
+            self._pnl_guard_size_multiplier = 1.0
+            self._pnl_guard_expiry_ts = 0.0
+            if self.telemetry:
+                try:
+                    self.telemetry.set_gauge("maker_pnl_guard_active", 0.0)
+                except Exception:
+                    pass
+
+    def apply_pnl_guard(
+        self,
+        extra_spread_bps: float,
+        size_multiplier: float,
+        ttl_seconds: float,
+    ) -> None:
+        if not self.pnl_guard_enabled:
+            return
+        ttl = max(0.0, float(ttl_seconds))
+        self._pnl_guard_spread_extra = min(
+            max(0.0, float(extra_spread_bps)), self.pnl_guard_max_extra_bps
+        )
+        self._pnl_guard_size_multiplier = max(
+            self.pnl_guard_min_size_multiplier, min(1.0, float(size_multiplier))
+        )
+        self._pnl_guard_expiry_ts = time.time() + ttl if ttl > 0 else 0.0
+        LOG.warning(
+            "[maker] PnL guard engaged: +%.2fbps spread, size x%.2f for %.0fs",
+            self._pnl_guard_spread_extra,
+            self._pnl_guard_size_multiplier,
+            ttl,
+        )
+        if self.telemetry:
+            try:
+                self.telemetry.set_gauge("maker_pnl_guard_active", 1.0)
+            except Exception:
+                pass
+
+    def clear_pnl_guard(self) -> None:
+        if not self.pnl_guard_enabled:
+            return
+        if self._pnl_guard_spread_extra > 0 or self._pnl_guard_size_multiplier < 0.999:
+            LOG.info("[maker] PnL guard cleared manually")
+        self._pnl_guard_spread_extra = 0.0
+        self._pnl_guard_size_multiplier = 1.0
+        self._pnl_guard_expiry_ts = 0.0
+        if self.telemetry:
+            try:
+                self.telemetry.set_gauge("maker_pnl_guard_active", 0.0)
+            except Exception:
+                pass
+
+    def get_pnl_guard_state(self) -> Dict[str, float]:
+        return {
+            "extra_spread_bps": float(self._pnl_guard_spread_extra),
+            "size_multiplier": float(self._pnl_guard_size_multiplier),
+            "expires_at": float(self._pnl_guard_expiry_ts),
+            "enabled": float(1.0 if self.pnl_guard_enabled else 0.0),
+        }
 
     def _update_volatility(self, mid: Optional[float]) -> float:
         if not self.vol_enabled or mid is None:

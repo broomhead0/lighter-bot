@@ -786,6 +786,9 @@ async def main():
             ],
         )
 
+    pnl_guard_cfg = (maker_cfg.get("pnl_guard") or {}) if isinstance(maker_cfg, dict) else {}
+    pnl_guard_enabled = bool(pnl_guard_cfg.get("enabled", False))
+
     hedger = None
     if Hedger:
         hedger_cfg = cfg.get("hedger") or {}
@@ -974,6 +977,78 @@ async def main():
             await asyncio.sleep(5.0)
 
     tasks.append(asyncio.create_task(periodic_core_metrics(), name="metrics"))
+
+    if (
+        maker
+        and pnl_guard_enabled
+        and metrics_compositor
+        and hasattr(maker, "apply_pnl_guard")
+    ):
+        guard_window = float(pnl_guard_cfg.get("window_seconds", 300))
+        guard_floor = float(pnl_guard_cfg.get("realized_floor_quote", -0.5))
+        guard_trigger = max(1, int(pnl_guard_cfg.get("trigger_consecutive", 1)))
+        guard_widen = float(pnl_guard_cfg.get("widen_bps", 2.0))
+        guard_size_multiplier = float(pnl_guard_cfg.get("size_multiplier", 0.9))
+        guard_cooldown = float(pnl_guard_cfg.get("cooldown_seconds", 60))
+        guard_check_interval = max(
+            5.0, float(pnl_guard_cfg.get("check_interval_seconds", 15))
+        )
+
+        async def pnl_guard_loop():
+            consecutive = 0
+            guard_active = False
+            log = logging.getLogger("main")
+            log.info(
+                "[main] PnL guard enabled: window=%ss floor=%.4f widen=%.2fbps size=%.2fx",
+                guard_window,
+                guard_floor,
+                guard_widen,
+                guard_size_multiplier,
+            )
+            while not stop_event.is_set():
+                mids_override: Dict[str, float] = {}
+                if state and hasattr(state, "get_inventory") and hasattr(state, "get_mid"):
+                    try:
+                        inv_map = state.get_inventory()
+                        if isinstance(inv_map, dict):
+                            for market in inv_map.keys():
+                                mid_val = state.get_mid(market)
+                                if mid_val is not None:
+                                    mids_override[market] = float(mid_val)
+                    except Exception:
+                        mids_override = {}
+                realized_quote = 0.0
+                try:
+                    snapshot = metrics_compositor.snapshot(
+                        window_seconds=guard_window,
+                        mids_override=mids_override,
+                    )
+                    realized_quote = float(snapshot.realized_quote)
+                except Exception as exc:
+                    log.debug("[main] pnl_guard snapshot failed: %s", exc)
+                if telemetry:
+                    try:
+                        telemetry.set_gauge(
+                            "maker_pnl_guard_realized_window", float(realized_quote)
+                        )
+                    except Exception:
+                        pass
+                if realized_quote <= guard_floor:
+                    consecutive += 1
+                else:
+                    consecutive = 0
+                    if guard_active and hasattr(maker, "clear_pnl_guard"):
+                        maker.clear_pnl_guard()
+                        guard_active = False
+                if consecutive >= guard_trigger:
+                    maker.apply_pnl_guard(guard_widen, guard_size_multiplier, guard_cooldown)
+                    guard_active = True
+                    consecutive = 0
+                await asyncio.sleep(guard_check_interval)
+            if guard_active and hasattr(maker, "clear_pnl_guard"):
+                maker.clear_pnl_guard()
+
+        tasks.append(asyncio.create_task(pnl_guard_loop(), name="pnl_guard"))
 
     async def run_component(name: str, comp):
         if not comp:

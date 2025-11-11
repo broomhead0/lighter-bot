@@ -8,14 +8,12 @@
   - `modules/hedger.py` – hedges toward `target_units`, respects `max_slippage_bps`
   - `modules/self_trade_guard.py` – guard rails activated via `guard.*` config
 - **Critical Config (`config.yaml`)**:
-  - `maker.size` 0.064 (`size_min` 0.061, `size_max` 0.072)
-  - `maker.price_scale` 1000, `maker.size_scale` 1000
-  - `maker.exchange_min_notional` 10.5 (keeps base >= exchange minimum)
-  - `maker.volatility` block enabled (EMA halflife 30 s, pause at 30 bps, resume at 18 bps, inventory ratio 0.25)
-  - `maker.trend` filter active (45 s lookback, 12 bps trigger) — widens spreads & quotes one-sided when the tape trends
-  - `hedger.dry_run` false, `trigger_units` 0.07, `max_clip_units` 0.04, `price_offset_bps` 6
-  - `hedger` prefers passive exits (`prefer_passive` true, wait 1.5 s, 2 bps offset)
-  - `guard.max_position_units` 0.2, `guard.max_inventory_notional` 35
+  - `maker.size` 0.064 (`size_min` 0.061, `size_max` 0.072), exchange min size 0.061, notional floor 10.5
+  - `maker.spread_bps` 12.0 baseline, volatility-aware band 7 → 13 bps, adaptive size multipliers 0.7 → 1.1, PnL guard can add up to +8 bps
+  - `maker.volatility` halflife 45 s, pauses at 30 bps until vol recovers and inventory < 25 % of soft cap
+  - `maker.trend` filter (45 s lookback, +/-12 bps trigger, resumes at 6 bps, extra spread 2.5 bps, bid/ask gating)
+  - `hedger` live (dry_run false): `trigger_units` 0.07, `target_units` 0.03, `max_clip_units` 0.08, `max_slippage_bps` 7, prefers passive, waits 0.4 s at 2 bps offset before crossing
+  - `guard.max_position_units` 0.3, `guard.max_inventory_notional` 50, 5 s backoff on block
   - `metrics` ledger enabled (`data/metrics/fills.jsonl`, 5 MB rotation, 6 h rolling window)
 - **Environment expectations**:
   - `WS_AUTH_TOKEN` stored in Railway & `.env.ws_token` (regenerate with `scripts/refresh_ws_token.py`)
@@ -37,9 +35,13 @@
 - **Known Risks**:
   - Inventory drift if hedger throttled; monitor `hedger` logs and `guard` alerts.
   - Premium tier not enabled; maker fees assumed zero.
-- **Next Steps**:
-  - Monitor SOL PnL over next session using `fetch_trades.py`
-  - Continue tuning volatility multipliers / hedger clips if drawdown persists
-  - Expand `profiles/` for future market rotations (`set_market.py --profile-out` saves baseline)
+- **Positive-PnL Stabilization Plan**:
+  1. **Edge First** – Widen base `maker.spread_bps` toward 12–15 bps, let volatility band tighten only when fills are profitable; clip sizes stay modest until realized ≥ 0 for 30 min.
+  2. **Self-Healing Guard** – Add a short-window realized-PnL watchdog (5 min) that auto-widens spreads or trims size when consecutive slices go negative.
+  3. **Hit Quality** – Track how often resting orders trade immediately; if we’re lone top-of-book/liquidity-taking, widen in real time and prioritize quoting the safe side.
+  4. **Hedger as Alpha** – Keep passive-first hedging, but abandon the cross if spread move exceeds plan; optionally add a second resting tier to capture kickbacks.
+  5. **Premium Only After Proof** – Flip fees + enlarge clips only once realized PnL runs neutral/positive with the guard engaged; re-evaluate every time we change markets.
+  - Dashboard work: expose 5 min window metrics via `metrics_tool window --seconds 300` (requires restoring `railway ssh`) and surface in docs/gauges for quick sanity checks.
+  - Scale size & pursue premium after step 5 succeeds; update this packet as thresholds change.
 
 

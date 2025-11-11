@@ -26,7 +26,7 @@ maker:
   size_max: 0.072
   exchange_min_size: 0.061
   inventory_soft_cap: 0.10
-  spread_bps: 9.5
+  spread_bps: 12.0
   price_scale: 1000
   size_scale: 1000
   volatility:
@@ -49,6 +49,17 @@ maker:
     extra_spread_bps: 2.5
     inventory_soft_cap_ratio: 0.6
   exchange_min_notional: 10.5
+  pnl_guard:
+    enabled: true
+    window_seconds: 300
+    realized_floor_quote: -0.5
+    trigger_consecutive: 2
+    widen_bps: 4.0
+    size_multiplier: 0.85
+    cooldown_seconds: 120
+    check_interval_seconds: 15
+    max_extra_bps: 8.0
+    min_size_multiplier: 0.6
 hedger:
   enabled: true
   dry_run: false
