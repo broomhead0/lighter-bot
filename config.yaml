@@ -53,9 +53,9 @@ hedger:
   enabled: true
   dry_run: false
   market: market:2
-  trigger_units: 0.09
+  trigger_units: 0.07
   trigger_notional: 7.0
-  target_units: 0.02
+  target_units: 0.03
   max_clip_units: 0.08
   price_offset_bps: 6
   max_slippage_bps: 7
@@ -64,7 +64,7 @@ hedger:
   max_attempts: 3
   retry_backoff_seconds: 2.0
   prefer_passive: true
-  passive_wait_seconds: 0.6
+  passive_wait_seconds: 0.4
   passive_offset_bps: 2.0
 fees:
   maker_actual_rate: 0.0
