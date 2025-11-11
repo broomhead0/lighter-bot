@@ -54,6 +54,12 @@ class MakerEngine:
         if self.min_size > self.max_size:
             self.min_size, self.max_size = self.max_size, self.min_size
         self.exchange_min_size = float(maker_cfg.get("exchange_min_size", 0.001))
+        try:
+            self.size_scale = int(float(maker_cfg.get("size_scale", 1)))
+        except Exception:
+            self.size_scale = 1
+        if self.size_scale <= 0:
+            self.size_scale = 1
         self.exchange_min_notional = float(
             maker_cfg.get("exchange_min_notional", 0.0)
         )
@@ -181,7 +187,7 @@ class MakerEngine:
                 bid, ask, spread = self._compute_quotes(
                     mid, volatility_bps, extra_spread_bps=extra_spread
                 )
-                quote_size = self._compute_quote_size(volatility_bps)
+                quote_size = self._compute_quote_size(mid, volatility_bps)
 
                 # Check cancel discipline (throttle if exceeded)
                 self._check_cancel_discipline()
@@ -348,7 +354,11 @@ class MakerEngine:
             except Exception:
                 pass
 
-    def _compute_quote_size(self, volatility_bps: Optional[float] = None) -> float:
+    def _compute_quote_size(
+        self,
+        mid: Optional[float],
+        volatility_bps: Optional[float] = None,
+    ) -> float:
         size = self.base_size
         min_size = max(1e-6, self.min_size)
         max_size = max(min_size, self.max_size)
@@ -382,28 +392,36 @@ class MakerEngine:
             size = min(max_size, max(min_size, size))
             if size < self.exchange_min_size:
                 size = self.exchange_min_size
-        if self.exchange_min_notional > 0.0:
-            mid = None
-            if self.state and hasattr(self.state, "get_mid"):
-                try:
-                    mid_val = self.state.get_mid(self.market)
-                    if mid_val:
-                        mid = float(mid_val)
-                except Exception:
-                    mid = None
-            if mid:
-                min_units = self.exchange_min_notional / mid
-                if size * mid < self.exchange_min_notional:
-                    size = max(size, min_units)
-                    size = min(max_size, max(min_size, size))
-                    if size < self.exchange_min_size:
-                        size = self.exchange_min_size
+        effective_mid = mid
+        if effective_mid is None and self.state and hasattr(self.state, "get_mid"):
+            try:
+                mid_val = self.state.get_mid(self.market)
+                if mid_val:
+                    effective_mid = float(mid_val)
+            except Exception:
+                effective_mid = None
+        min_units = self._min_units_for_notional(effective_mid)
+        if min_units is not None and size < min_units:
+            size = min_units
+            size = min(max_size, max(min_size, size))
+            if size < self.exchange_min_size:
+                size = self.exchange_min_size
         if getattr(self, "telemetry", None):
             try:
                 self.telemetry.set_gauge("maker_quote_size", float(size))
             except Exception:
                 pass
         return float(size)
+
+    def _min_units_for_notional(self, mid: Optional[float]) -> Optional[float]:
+        if self.exchange_min_notional <= 0.0 or mid is None or mid <= 0.0:
+            if self.exchange_min_size > 0.0:
+                return max(self.exchange_min_size, self.min_size)
+            return None
+        scale = max(1, self.size_scale)
+        raw_units = self.exchange_min_notional / mid
+        quantized = math.ceil(raw_units * scale) / float(scale)
+        return max(self.exchange_min_size, quantized)
 
     def _current_inventory(self) -> float:
         if self.state and hasattr(self.state, "get_inventory"):
