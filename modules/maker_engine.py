@@ -373,6 +373,15 @@ class MakerEngine:
         size = min(max_size, max(min_size, size))
         if size < self.exchange_min_size:
             size = self.exchange_min_size
+        if self.pnl_guard_enabled:
+            guard_multiplier = max(
+                self.pnl_guard_min_size_multiplier,
+                min(1.0, self._pnl_guard_size_multiplier),
+            )
+            size *= guard_multiplier
+            size = min(max_size, max(min_size, size))
+            if size < self.exchange_min_size:
+                size = self.exchange_min_size
         if self.exchange_min_notional > 0.0:
             mid = None
             if self.state and hasattr(self.state, "get_mid"):
@@ -387,15 +396,8 @@ class MakerEngine:
                 if size * mid < self.exchange_min_notional:
                     size = max(size, min_units)
                     size = min(max_size, max(min_size, size))
-        if self.pnl_guard_enabled:
-            guard_multiplier = max(
-                self.pnl_guard_min_size_multiplier,
-                min(1.0, self._pnl_guard_size_multiplier),
-            )
-            size *= guard_multiplier
-            size = min(max_size, max(min_size, size))
-            if size < self.exchange_min_size:
-                size = self.exchange_min_size
+                    if size < self.exchange_min_size:
+                        size = self.exchange_min_size
         if getattr(self, "telemetry", None):
             try:
                 self.telemetry.set_gauge("maker_quote_size", float(size))
