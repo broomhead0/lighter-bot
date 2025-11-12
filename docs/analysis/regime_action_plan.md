@@ -13,8 +13,9 @@
 - Maintain compatibility with guard scaling and lot quantisation.
 
 ### 3. Hedger Tightening / Safeguard
-- Current defensive profile: `max_clip_units` 0.11, timeout 8 s, telemetry `hedger_force_aggressive`.
-- TODO: add emergency taker flatten if guard stays active past the timeout; reset to lighter clips once inventory clears.
+- Defensive baseline: `max_clip_units` 0.11, timeout 8 s, telemetry `hedger_force_aggressive`.
+- ✅ Guard-aware safeguard: if `maker_guard_block_active` persists ≥10 s, hedger skips passive, boosts clip ×1.4, adds +6 bps cross, and re-arms after 0.75 s (telemetry `hedger_guard_emergency`).
+- Next tuning: adjust timeout / multiplier based on guard dwell logs to avoid over-trading during brief halts.
 
 ### 4. Fee Resilience Checks
 - Extend `analysis/regime_analysis.py` or a notebook to simulate maker fee rates (2–4 bps) over the realized PnL windows.

@@ -25,12 +25,12 @@
 - **Action Items**:
   1. **Trend Guard Expansion** – Modify maker trend filter to pause or widen the sell side whenever 5-minute return < –6 bps, including a configurable cooldown and telemetry flags.
   2. **Vol Clip Curve** – Blend volatility percentile into guard sizing so clips shrink toward the exchange minimum once 1m σ exceeds ~0.09%.
-  3. **Hedger Tighten** – Lower `trigger_units` from 0.07 → 0.05, review `target_units` ~0.02, and add passive timeout to clear residual delta quickly.
+  3. **Hedger Tighten** – Lower `trigger_units` from 0.07 → 0.05, review `target_units` ~0.02, add passive timeout, and escalate to guard-aware emergency flatten when blocks persist.
   4. **Adaptive Profiles** – Add dynamic regime switching so the maker engine toggles between defensive and aggressive profiles based on trend/guard signals (`maker_regime_state` telemetry).
   5. **Fee Simulation & PnL Visibility** – Extend `analysis/regime_analysis.py` (or notebook) to layer in 2–4 bps maker fees and report hourly net; publish FIFO realized PnL via telemetry (`maker_fifo_realized_quote`) before enabling premium points.
 
 ## Next Steps (2025-11-12)
-- Enforce the hedger emergency flatten (`hedger-safeguard`) if guard remains active beyond `passive_timeout_seconds`.
+- Monitor the new guard-aware hedge safeguard (≥10 s block → clip ×1.4, +6 bps cross) and adjust thresholds if it chatters.
 - Watch telemetry (`maker_regime_state`, `maker_fifo_realized_quote`, `maker_trend_down_guard`) over the next live session to verify regime flips and maker edge.
 - Once an up/neutral stretch appears, evaluate widening the aggressive profile (clips, cooldown) to harvest more rebates.
 - Re-run the 5-minute PnL window export + regime analysis after the next session and fold results into this plan.

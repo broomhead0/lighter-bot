@@ -34,6 +34,9 @@ class StateStore:
         # Order tracking
         self._open_orders: Dict[str, Dict[str, Any]] = {}  # order_id -> order info
 
+        # Guard block tracking (per market)
+        self._guard_block_since: Dict[str, float] = {}
+
         # Fee & volume stats
         self._volume_stats = {
             "maker_notional": Decimal("0"),
@@ -131,6 +134,23 @@ class StateStore:
             for oid, info in self._open_orders.items()
             if info.get("market") == market_id
         }
+
+    # -------- Guard tracking ----------
+    def mark_guard_blocked(self, market_id: Optional[str], timestamp: Optional[float] = None) -> None:
+        if market_id is None:
+            return
+        ts = float(timestamp) if timestamp is not None else time.time()
+        self._guard_block_since[market_id] = ts
+
+    def clear_guard_block(self, market_id: Optional[str]) -> None:
+        if market_id is None:
+            return
+        self._guard_block_since.pop(market_id, None)
+
+    def get_guard_block_since(self, market_id: Optional[str] = None):
+        if market_id is None:
+            return dict(self._guard_block_since)
+        return self._guard_block_since.get(market_id)
 
     # -------- Fee & volume stats ----------
     def record_volume_sample(

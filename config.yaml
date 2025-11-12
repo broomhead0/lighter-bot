@@ -94,6 +94,10 @@ hedger:
   passive_wait_seconds: 0.25
   passive_offset_bps: 2.0
   passive_timeout_seconds: 8.0
+  guard_emergency_seconds: 10.0
+  guard_emergency_clip_multiplier: 1.4
+  guard_emergency_extra_bps: 6.0
+  guard_emergency_cooldown_seconds: 0.75
 fees:
   maker_actual_rate: 0.0
   taker_actual_rate: 0.0

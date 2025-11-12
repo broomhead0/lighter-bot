@@ -88,6 +88,23 @@ class Hedger:
         self.passive_timeout_seconds = float(
             hedger_cfg.get("passive_timeout_seconds", 0.0)
         )
+        default_guard_seconds = 0.0
+        if self.passive_timeout_seconds > 0:
+            default_guard_seconds = self.passive_timeout_seconds + 2.0
+        self.guard_emergency_seconds = float(
+            hedger_cfg.get("guard_emergency_seconds", default_guard_seconds)
+        )
+        self.guard_emergency_clip_multiplier = float(
+            hedger_cfg.get("guard_emergency_clip_multiplier", 1.2)
+        )
+        self.guard_emergency_extra_bps = float(
+            hedger_cfg.get("guard_emergency_extra_bps", 4.0)
+        )
+        self.guard_emergency_cooldown = float(
+            hedger_cfg.get(
+                "guard_emergency_cooldown_seconds", min(self.cooldown_seconds, 1.0)
+            )
+        )
 
         # If taker fees are zero (standard tier), force dry-run to avoid accidental cost.
         if self.taker_fee_actual == Decimal("0") and not self._explicit_dry_run:
@@ -182,6 +199,7 @@ class Hedger:
             if self.telemetry:
                 try:
                     self.telemetry.set_gauge("hedger_force_aggressive", 0.0)
+                    self.telemetry.set_gauge("hedger_guard_emergency", 0.0)
                 except Exception:
                     pass
             return
@@ -193,6 +211,26 @@ class Hedger:
             LOG.debug("[hedger] no mid price available for %s", self.market)
             return
 
+        guard_block_age = None
+        guard_emergency_active = False
+        if (
+            self.guard_emergency_seconds > 0.0
+            and self.state
+            and hasattr(self.state, "get_guard_block_since")
+        ):
+            try:
+                guard_since_val = self.state.get_guard_block_since(self.market)
+            except Exception:
+                guard_since_val = None
+            if guard_since_val is not None:
+                try:
+                    guard_ts = float(guard_since_val)
+                    guard_block_age = now - guard_ts
+                    if guard_block_age >= self.guard_emergency_seconds:
+                        guard_emergency_active = True
+                except Exception:
+                    guard_block_age = None
+
         if self.trigger_notional is not None:
             notional = abs_inv * Decimal(str(mid))
             if notional <= self.trigger_notional:
@@ -202,16 +240,28 @@ class Hedger:
         if excess_units <= Decimal("0"):
             return
 
-        hedge_units = min(excess_units, self.max_clip_units)
+        clip_limit = self.max_clip_units
+        if guard_emergency_active and self.guard_emergency_clip_multiplier > 1.0:
+            try:
+                clip_limit = self.max_clip_units * Decimal(
+                    str(self.guard_emergency_clip_multiplier)
+                )
+            except Exception:
+                clip_limit = self.max_clip_units
+            if clip_limit > abs_inv:
+                clip_limit = abs_inv
+        hedge_units = min(excess_units, clip_limit)
         if hedge_units <= Decimal("0"):
             return
 
         side = "ask" if inventory > 0 else "bid"
-        price = self._aggressive_price(mid, side)
 
         prefer_passive = self.prefer_passive
         force_aggressive = False
-        if (
+        if guard_emergency_active:
+            prefer_passive = False
+            force_aggressive = True
+        elif (
             self.passive_timeout_seconds > 0.0
             and self._over_trigger_since is not None
             and (now - self._over_trigger_since) >= self.passive_timeout_seconds
@@ -219,13 +269,25 @@ class Hedger:
             prefer_passive = False
             force_aggressive = self.prefer_passive
 
+        price = self._aggressive_price(
+            mid,
+            side,
+            extra_bps=self.guard_emergency_extra_bps if guard_emergency_active else 0.0,
+        )
+
         if self.telemetry:
             try:
                 self.telemetry.set_gauge(
                     "hedger_force_aggressive", 1.0 if force_aggressive else 0.0
                 )
+                self.telemetry.set_gauge(
+                    "hedger_guard_emergency", 1.0 if guard_emergency_active else 0.0
+                )
             except Exception:
                 pass
+
+        if guard_emergency_active:
+            self._next_allowed_ts = 0.0
 
         if time.time() < self._next_allowed_ts:
             LOG.debug("[hedger] cooling down (%.2fs remaining)", self._next_allowed_ts - time.time())
@@ -245,7 +307,10 @@ class Hedger:
             except Exception:
                 pass
 
-        self._next_allowed_ts = time.time() + self.cooldown_seconds
+        cooldown = self.cooldown_seconds
+        if guard_emergency_active and self.guard_emergency_cooldown is not None:
+            cooldown = max(0.1, float(self.guard_emergency_cooldown))
+        self._next_allowed_ts = time.time() + cooldown
         if success:
             self._over_trigger_since = None
 
@@ -259,8 +324,9 @@ class Hedger:
                 pass
         return None
 
-    def _aggressive_price(self, mid: float, side: str) -> float:
-        offset = (self.price_offset_bps / 10_000.0) * mid
+    def _aggressive_price(self, mid: float, side: str, extra_bps: float = 0.0) -> float:
+        offset_bps = max(0.0, self.price_offset_bps + float(extra_bps))
+        offset = (offset_bps / 10_000.0) * mid
         if side == "ask":
             return max(0.0, mid - offset)
         return mid + offset

@@ -247,6 +247,7 @@ class MakerEngine:
                 self._check_cancel_discipline()
 
                 # Guard: validate quotes before posting
+                guard_blocked = False
                 if self.guard:
                     if not self.guard.is_allowed(
                         Decimal(str(mid)),
@@ -254,13 +255,36 @@ class MakerEngine:
                         Decimal(str(ask)),
                         self.market
                     ):
+                        guard_blocked = True
                         LOG.warning(
                             "[maker] quote blocked by guard: mid=%.4f bid=%.4f ask=%.4f",
-                            mid, bid, ask
+                            mid,
+                            bid,
+                            ask,
                         )
+                        if self.state and hasattr(self.state, "mark_guard_blocked"):
+                            try:
+                                self.state.mark_guard_blocked(self.market, time.time())
+                            except Exception:
+                                pass
+                        if self.telemetry:
+                            try:
+                                self.telemetry.set_gauge("maker_guard_block_active", 1.0)
+                            except Exception:
+                                pass
                         await self._cancel_all_orders()
                         await asyncio.sleep(self.refresh_seconds)
                         continue
+                if not guard_blocked and self.state and hasattr(self.state, "clear_guard_block"):
+                    try:
+                        self.state.clear_guard_block(self.market)
+                    except Exception:
+                        pass
+                if self.telemetry:
+                    try:
+                        self.telemetry.set_gauge("maker_guard_block_active", 0.0)
+                    except Exception:
+                        pass
 
                 # Chaos: force cancel if testing cancel discipline
                 if self.chaos and self.chaos.should_force_cancel():
