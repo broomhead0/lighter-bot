@@ -14,7 +14,7 @@
 
 ### 3. Hedger Tightening / Safeguard
 - Defensive baseline: `max_clip_units` 0.10, timeout 8 s, telemetry `hedger_force_aggressive`.
-- ✅ Guard-aware dampening: when `maker_pnl_guard_active` is true, hedger shrinks clips to ×0.65, drops taker cross to 7 bps, and caps slippage at 9 bps to preserve maker edge.
+- ✅ Guard-aware dampening: when `maker_pnl_guard_active` is true, hedger shrinks clips to ×0.65, drops taker cross to 8 bps, and caps slippage at 9 bps to preserve maker edge.
 - ✅ Guard emergency: if `maker_guard_block_active` persists ≥10 s, hedger skips passive, boosts clip ×1.4, adds +6 bps cross, and re-arms after 0.75 s (telemetry `hedger_guard_emergency`).
 - Next tuning: review 20 min slices after each tweak; adjust multipliers/offsets based on FIFO drift vs taker costs.
 
