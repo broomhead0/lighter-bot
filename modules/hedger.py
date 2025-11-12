@@ -85,6 +85,9 @@ class Hedger:
         self.passive_offset_bps = float(
             hedger_cfg.get("passive_offset_bps", max(1.0, self.price_offset_bps / 2))
         )
+        self.passive_timeout_seconds = float(
+            hedger_cfg.get("passive_timeout_seconds", 0.0)
+        )
 
         # If taker fees are zero (standard tier), force dry-run to avoid accidental cost.
         if self.taker_fee_actual == Decimal("0") and not self._explicit_dry_run:
@@ -109,6 +112,7 @@ class Hedger:
         self._loop_task: Optional[asyncio.Task] = None
         self._next_allowed_ts = 0.0
         self._open_passive_orders: set[int] = set()
+        self._over_trigger_since: Optional[float] = None
 
     async def start(self) -> None:
         if self._loop_task or not self.enabled:
@@ -172,8 +176,17 @@ class Hedger:
                 return
 
         abs_inv = abs(inventory)
+        now = time.time()
         if abs_inv <= self.trigger_units:
+            self._over_trigger_since = None
+            if self.telemetry:
+                try:
+                    self.telemetry.set_gauge("hedger_force_aggressive", 0.0)
+                except Exception:
+                    pass
             return
+        if self._over_trigger_since is None:
+            self._over_trigger_since = now
 
         mid = self._get_mid_price()
         if mid is None:
@@ -196,6 +209,24 @@ class Hedger:
         side = "ask" if inventory > 0 else "bid"
         price = self._aggressive_price(mid, side)
 
+        prefer_passive = self.prefer_passive
+        force_aggressive = False
+        if (
+            self.passive_timeout_seconds > 0.0
+            and self._over_trigger_since is not None
+            and (now - self._over_trigger_since) >= self.passive_timeout_seconds
+        ):
+            prefer_passive = False
+            force_aggressive = self.prefer_passive
+
+        if self.telemetry:
+            try:
+                self.telemetry.set_gauge(
+                    "hedger_force_aggressive", 1.0 if force_aggressive else 0.0
+                )
+            except Exception:
+                pass
+
         if time.time() < self._next_allowed_ts:
             LOG.debug("[hedger] cooling down (%.2fs remaining)", self._next_allowed_ts - time.time())
             return
@@ -206,6 +237,7 @@ class Hedger:
             price=price,
             mid=mid,
             abs_inventory=abs_inv,
+            prefer_passive=prefer_passive,
         )
         if success and self.telemetry and hasattr(self.telemetry, "touch"):
             try:
@@ -214,6 +246,8 @@ class Hedger:
                 pass
 
         self._next_allowed_ts = time.time() + self.cooldown_seconds
+        if success:
+            self._over_trigger_since = None
 
     def _get_mid_price(self) -> Optional[float]:
         if self.state and hasattr(self.state, "get_mid"):
@@ -244,13 +278,16 @@ class Hedger:
         price: float,
         mid: Optional[float] = None,
         abs_inventory: Decimal = Decimal("0"),
+        prefer_passive: Optional[bool] = None,
     ) -> bool:
         size_dec = Decimal(str(size))
         price_dec = Decimal(str(price))
         notional = size_dec * price_dec
 
+        use_passive = self.prefer_passive if prefer_passive is None else bool(prefer_passive)
+
         if (
-            self.prefer_passive
+            use_passive
             and not self.dry_run
             and self._trading_client
             and mid is not None

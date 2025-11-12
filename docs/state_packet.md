@@ -10,11 +10,12 @@
 - **Critical Config (`config.yaml`)**:
   - `maker.size` 0.064 (`size_min` 0.061, `size_max` 0.072), exchange min size 0.061, notional floor 10.5
   - `maker.spread_bps` 12.0 baseline, volatility-aware band 7 → 13 bps, adaptive size multipliers 0.7 → 1.1, PnL guard can add up to +8 bps
-  - `maker.volatility` halflife 45 s, pauses at 30 bps until vol recovers and inventory < 25 % of soft cap
-  - `maker.trend` filter (45 s lookback, +/-12 bps trigger, resumes at 6 bps, extra spread 2.5 bps, bid/ask gating)
-  - `hedger` live (dry_run false): `trigger_units` 0.07, `target_units` 0.03, `max_clip_units` 0.08, `max_slippage_bps` 7, prefers passive, waits 0.4 s at 2 bps offset before crossing
+  - `maker.volatility` halflife 45 s, pauses at 30 bps until vol recovers and inventory < 25 % of soft cap; additional high-vol clip multiplier 0.85 when 1 m σ > 9 bps (telemetry `maker_high_vol_clip_active`)
+  - `maker.trend` filter (45 s lookback, up-trend trigger +12 bps, down-trend trigger -6 bps biasing to asks, resumes at ±6 bps, extra spread +2.5 bps up/+6 bps down, 45 s bid cooldown; telemetry `maker_trend_down_guard`, `maker_trend_down_cooldown_active`)
+  - `hedger` live (dry_run false): `trigger_units` 0.05, `target_units` 0.02, `max_clip_units` 0.11, `max_slippage_bps` 12, prefers passive with 0.25 s wait @ 2 bps, forces aggressive cross after 8 s exposure (telemetry `hedger_force_aggressive`)
   - `guard.max_position_units` 0.3, `guard.max_inventory_notional` 50, 5 s backoff on block
   - `metrics` ledger enabled (`data/metrics/fills.jsonl`, 5 MB rotation, 6 h rolling window)
+  - Telemetry exposes FIFO realized maker PnL via `maker_fifo_realized_quote` (plus per-market gauges)
 - **Environment expectations**:
   - `WS_AUTH_TOKEN` stored in Railway & `.env.ws_token` (regenerate with `scripts/refresh_ws_token.py`)
   - `LIGHTER_API_BEARER` exported locally when running REST scripts
@@ -41,7 +42,41 @@
   3. **Hit Quality** – Track how often resting orders trade immediately; if we’re lone top-of-book/liquidity-taking, widen in real time and prioritize quoting the safe side.
   4. **Hedger as Alpha** – Keep passive-first hedging, but abandon the cross if spread move exceeds plan; optionally add a second resting tier to capture kickbacks.
   5. **Premium Only After Proof** – Flip fees + enlarge clips only once realized PnL runs neutral/positive with the guard engaged; re-evaluate every time we change markets.
+  - **Recent Work (Nov 11)**:
+    - Widened default spread to 12 bps and added PnL guard module (`MakerEngine.apply_pnl_guard`) with 5 minute realized floor.
+    - Quantized guard-adjusted clip sizes to the exchange lot step to prevent `21706` errors.
+    - Loosened hedger slippage/offset tolerances and temporarily raised guard limits to flush inventory during drawdowns.
+    - Observed UI PnL stabilizing post-fix; current baseline keeps realized near zero while volatility settles.
   - Dashboard work: expose 5 min window metrics via `metrics_tool window --seconds 300` (requires restoring `railway ssh`) and surface in docs/gauges for quick sanity checks.
   - Scale size & pursue premium after step 5 succeeds; update this packet as thresholds change.
+
+## SOL Regime Analysis Gameplan
+
+Objective: understand when the bot makes/loses money by correlating realized PnL with SOL price action, volatility, and guard/hedger events.
+
+1. **Data Collection**
+   - Use Lighter REST candles for `market:2` (`/public/markets/{id}/candles?interval=1m`) to fetch OHLCV aligned with bot timestamps. Fallback: Binance `SOLUSDT` klines.
+   - Export 5-minute slices from our ledger (fills + mids) using `metrics_tool.py window --seconds <window>` or by reading `data/metrics/fills.jsonl`.
+   - Log guard activations, hedger crosses, and inventory peaks (already surfaced in logs/metrics).
+
+2. **Feature Engineering**
+   - Compute rolling realized volatility (σ of log returns) and classify trend strength (EMA slope or simple momentum).
+   - Mark guard engagements, hedger taker fills, and inventory excursions per slice.
+   - Derive spread capture vs. mid move (maker edge, hedger slippage) from ledger entries.
+
+3. **Analysis Notebook**
+   - Build a Jupyter notebook that joins PnL slices with candle features.
+   - Plot realized PnL vs. volatility/trend buckets, guard frequency, hit quality, inventory duration.
+   - Identify regimes where realized PnL is consistently negative (e.g., strong trend + low vol) to inform adaptive logic.
+
+4. **Actionable Outputs**
+   - Define heuristics: widen spreads or pause one side when trend > threshold, relax guard floor during chop, etc.
+   - Prioritize changes that can run automatically via config or existing modules (trend filter, volatility block, guard settings).
+
+5. **Persistence**
+   - Store intermediate datasets (candles + PnL slices) under `data/analysis/`.
+   - Document findings in a new `docs/analysis/sol_regimes.md` once complete.
+
+Next: implement data-fetch script and analysis notebook after confirming plan.
 
 

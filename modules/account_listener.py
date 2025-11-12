@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import time
-from collections import deque
+from collections import deque, defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Dict, Optional
@@ -106,6 +106,8 @@ class AccountListener:
         self._stop = asyncio.Event()
         self._spawned = False
         self._fills: deque[FillRecord] = deque(maxlen=1000)
+        self._fifo_lots: Dict[str, deque] = defaultdict(deque)
+        self._fifo_realized_quote: Dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
 
     async def start(self) -> None:
         if self._spawned:
@@ -339,6 +341,17 @@ class AccountListener:
             except Exception as exc:
                 LOG.debug("[account] record_cash_flow failed: %s", exc)
 
+        fifo_realized_delta = self._update_fifo_realized(fill, base_delta, fee_actual)
+        if fifo_realized_delta is not None and self.telemetry:
+            try:
+                total_fifo = sum(self._fifo_realized_quote.values(), Decimal("0"))
+                self.telemetry.set_gauge("maker_fifo_realized_quote", float(total_fifo))
+                for market, value in self._fifo_realized_quote.items():
+                    gauge = f"maker_fifo_realized_quote_{market.replace(':', '_')}"
+                    self.telemetry.set_gauge(gauge, float(value))
+            except Exception:
+                pass
+
         mid_dec: Optional[Decimal] = None
         if hasattr(self.state, "get_mid"):
             try:
@@ -398,6 +411,54 @@ class AccountListener:
                         self.state.record_taker_slippage(abs(slip))
             except Exception as exc:
                 LOG.debug("[account] edge tracking failed: %s", exc)
+
+    def _update_fifo_realized(
+        self,
+        fill: FillRecord,
+        base_delta: Decimal,
+        fee_actual: Decimal,
+    ) -> Optional[Decimal]:
+        if fill.role.lower() != "maker":
+            return None
+
+        lots = self._fifo_lots[fill.market]
+        realized = Decimal("0")
+
+        if base_delta > 0:
+            remaining = base_delta
+            while lots and lots[0][0] < 0 and remaining > 0:
+                short_lot = lots[0]
+                lot_size, lot_price = short_lot
+                matched = min(remaining, -lot_size)
+                realized += (lot_price - fill.price) * matched
+                lot_size += matched  # lot_size is negative
+                remaining -= matched
+                if lot_size == 0:
+                    lots.popleft()
+                else:
+                    short_lot[0] = lot_size
+            if remaining > 0:
+                lots.append([remaining, fill.price])
+        elif base_delta < 0:
+            remaining = -base_delta
+            while lots and lots[0][0] > 0 and remaining > 0:
+                long_lot = lots[0]
+                lot_size, lot_price = long_lot
+                matched = min(remaining, lot_size)
+                realized += (fill.price - lot_price) * matched
+                lot_size -= matched
+                remaining -= matched
+                if lot_size == 0:
+                    lots.popleft()
+                else:
+                    long_lot[0] = lot_size
+            if remaining > 0:
+                lots.appendleft([-remaining, fill.price])
+
+        realized -= fee_actual
+        current = self._fifo_realized_quote[fill.market]
+        self._fifo_realized_quote[fill.market] = current + realized
+        return realized
 
     def _handle_position_entry(self, market_id: str, entry: Dict[str, Any]) -> None:
         market = f"market:{market_id}"

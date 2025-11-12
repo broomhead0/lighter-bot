@@ -88,9 +88,7 @@ class MakerEngine:
         self.vol_enabled = bool(vol_cfg.get("enabled", False))
         self.vol_low_bps = float(vol_cfg.get("low_bps", 5.0))
         self.vol_high_bps = float(vol_cfg.get("high_bps", 25.0))
-        self.vol_min_spread = float(
-            vol_cfg.get("min_spread_bps", self.spread_bps)
-        )
+        self.vol_min_spread = float(vol_cfg.get("min_spread_bps", self.spread_bps))
         self.vol_max_spread = float(
             vol_cfg.get("max_spread_bps", max(self.spread_bps, self.spread_bps * 2))
         )
@@ -106,6 +104,12 @@ class MakerEngine:
         self.vol_resume_inventory_ratio = float(
             vol_cfg.get("resume_inventory_ratio", 0.25)
         )
+        self.vol_high_vol_threshold = float(
+            vol_cfg.get("high_vol_threshold_bps", 0.0)
+        )
+        self.vol_high_vol_size_multiplier = float(
+            vol_cfg.get("high_vol_size_multiplier", 1.0)
+        )
         self.vol_half_life = max(float(vol_cfg.get("ema_halflife_seconds", 30.0)), 1.0)
         self._volatility_ema: Optional[float] = None
         self._volatility_last_mid: Optional[float] = None
@@ -118,13 +122,28 @@ class MakerEngine:
         self.trend_enabled = bool(trend_cfg.get("enabled", False))
         self.trend_lookback = float(trend_cfg.get("lookback_seconds", 30.0))
         self.trend_threshold_bps = float(trend_cfg.get("threshold_bps", 15.0))
+        self.trend_down_threshold_bps = float(
+            trend_cfg.get("down_threshold_bps", self.trend_threshold_bps)
+        )
         self.trend_hysteresis_bps = float(trend_cfg.get("resume_threshold_bps", 8.0))
         self.trend_extra_spread_bps = float(trend_cfg.get("extra_spread_bps", 3.0))
+        self.trend_down_extra_spread_bps = float(
+            trend_cfg.get("down_extra_spread_bps", self.trend_extra_spread_bps)
+        )
+        down_bias_cfg = str(trend_cfg.get("down_bias", "bid")).lower()
+        self.trend_down_state = (
+            "ask_only" if down_bias_cfg.startswith("ask") else "bid_only"
+        )
+        self.trend_down_cooldown_seconds = float(
+            trend_cfg.get("down_cooldown_seconds", 45.0)
+        )
         self.trend_inventory_ratio = float(
             trend_cfg.get("inventory_soft_cap_ratio", 0.7)
         )
         self._trend_samples: Deque[Tuple[float, float]] = deque(maxlen=256)
         self._trend_state: str = "neutral"
+        self._downtrend_cooldown_until: float = 0.0
+        self._trend_signal: str = "neutral"
 
         # Cancel discipline tracking
         limits_cfg = maker_cfg.get("limits") or {}
@@ -374,11 +393,19 @@ class MakerEngine:
             except Exception:
                 size = self.base_size
 
+        high_vol_clip = False
         if self.vol_enabled and volatility_bps is not None:
             factor = self._volatility_factor(volatility_bps)
             multiplier_span = self.vol_max_size_multiplier - self.vol_min_size_multiplier
             multiplier = self.vol_max_size_multiplier - multiplier_span * factor
             size *= max(0.0, multiplier)
+            if (
+                self.vol_high_vol_threshold > 0.0
+                and self.vol_high_vol_size_multiplier > 0.0
+                and volatility_bps >= self.vol_high_vol_threshold
+            ):
+                size *= self.vol_high_vol_size_multiplier
+                high_vol_clip = True
 
         size = min(max_size, max(min_size, size))
         if size < self.exchange_min_size:
@@ -409,6 +436,10 @@ class MakerEngine:
         if getattr(self, "telemetry", None):
             try:
                 self.telemetry.set_gauge("maker_quote_size", float(size))
+                if self.vol_enabled and self.vol_high_vol_threshold > 0.0:
+                    self.telemetry.set_gauge(
+                        "maker_high_vol_clip_active", 1.0 if high_vol_clip else 0.0
+                    )
             except Exception:
                 pass
         return float(size)
@@ -458,6 +489,7 @@ class MakerEngine:
 
         previous_state = self._trend_state
         threshold = self.trend_threshold_bps
+        down_threshold = self.trend_down_threshold_bps
         hysteresis = self.trend_hysteresis_bps
 
         if self._trend_state == "ask_only":
@@ -470,11 +502,32 @@ class MakerEngine:
         if self._trend_state == "neutral":
             if delta_bps >= threshold:
                 self._trend_state = "ask_only"
-            elif delta_bps <= -threshold:
-                self._trend_state = "bid_only"
+                self._trend_signal = "up"
+            elif delta_bps <= -down_threshold:
+                self._trend_state = self.trend_down_state
+                self._trend_signal = "down"
+                if self.trend_down_cooldown_seconds > 0:
+                    self._downtrend_cooldown_until = max(
+                        self._downtrend_cooldown_until,
+                        now + self.trend_down_cooldown_seconds,
+                    )
+            else:
+                self._trend_signal = "neutral"
+        elif self._trend_state == "ask_only" and self._trend_signal == "down":
+            if delta_bps > -hysteresis:
+                self._trend_signal = "neutral"
+        elif self._trend_state == "bid_only" and self._trend_signal == "up":
+            if delta_bps < hysteresis:
+                self._trend_signal = "neutral"
 
         if previous_state != self._trend_state:
-            LOG.info("[maker] trend state -> %s (delta=%.2fbps)", self._trend_state, delta_bps)
+            LOG.info(
+                "[maker] trend state -> %s (delta=%.2fbps)",
+                self._trend_state,
+                delta_bps,
+            )
+        if self._trend_state == "neutral":
+            self._trend_signal = "neutral"
 
         current_inv = self._current_inventory()
         inv_abs = abs(current_inv)
@@ -482,12 +535,21 @@ class MakerEngine:
         bias = "both"
         extra_spread = 0.0
 
+        cooldown_active = (
+            self.trend_down_cooldown_seconds > 0
+            and now < self._downtrend_cooldown_until
+        )
+
         if self._trend_state == "ask_only":
             if inv_abs > inv_limit and current_inv < 0:
                 bias = "both"
             else:
                 bias = "ask"
-                extra_spread = self.trend_extra_spread_bps
+                extra_spread = (
+                    self.trend_extra_spread_bps
+                    if self._trend_signal != "down"
+                    else self.trend_down_extra_spread_bps
+                )
         elif self._trend_state == "bid_only":
             if inv_abs > inv_limit and current_inv > 0:
                 bias = "both"
@@ -495,11 +557,26 @@ class MakerEngine:
                 bias = "bid"
                 extra_spread = self.trend_extra_spread_bps
 
+        if cooldown_active and bias != "both":
+            if bias != "ask":
+                bias = "ask"
+            extra_spread = max(extra_spread, self.trend_down_extra_spread_bps)
+
         if self.telemetry:
             try:
                 states = {"both": 0.0, "ask": 1.0, "bid": -1.0}
                 self.telemetry.set_gauge(
                     "maker_trend_bias", states.get(bias, 0.0)
+                )
+                self.telemetry.set_gauge(
+                    "maker_trend_down_guard",
+                    1.0
+                    if (self._trend_signal == "down" or cooldown_active)
+                    and bias != "both"
+                    else 0.0,
+                )
+                self.telemetry.set_gauge(
+                    "maker_trend_down_cooldown_active", 1.0 if cooldown_active else 0.0
                 )
             except Exception:
                 pass

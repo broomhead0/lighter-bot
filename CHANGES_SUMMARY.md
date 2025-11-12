@@ -18,6 +18,17 @@
   3. **Trend dead-band**: use 45s EMA to pause the aggressive side during strong trends to avoid taker bleed.
   4. **Monitor**: Use `metrics_tool.py window --hours 1` (and `--seconds 300`) as truth; intervene if realized PnL drifts < –$5/hr.
   5. **Points budget**: Once realized wins, earmark small profit slices to cover future premium fees.
+
+## 2025-11-12 – Regime Response Plan
+
+- **Motivation**: Regime study (Binance SOLUSDT 1m + 5m PnL slices) shows realized losses concentrated in down-trend / mid-to-high vol buckets.
+- **Action Items**:
+  1. **Trend Guard Expansion** – Modify maker trend filter to pause or widen the sell side whenever 5-minute return < –6 bps, including a configurable cooldown and telemetry flags.
+  2. **Vol Clip Curve** – Blend volatility percentile into guard sizing so clips shrink toward the exchange minimum once 1m σ exceeds ~0.09%.
+  3. **Hedger Tighten** – Lower `trigger_units` from 0.07 → 0.05, review `target_units` ~0.02, and add passive timeout to clear residual delta quickly.
+  4. **Fee Simulation & PnL Visibility** – Extend `analysis/regime_analysis.py` (or notebook) to layer in 2–4 bps maker fees and report hourly net; publish FIFO realized PnL via telemetry (`maker_fifo_realized_quote`) before enabling premium points.
+  5. **Validation Loop** – After deploy, re-export 5-minute slices and rerun the analyzer; capture before/after snapshots in `docs/analysis/sol_regimes.md`.
+- **Reference**: `docs/analysis/regime_action_plan.md` holds the detailed workflow.
 # Code Review & Fixes Summary
 
 ## ✅ Critical Fixes Completed
