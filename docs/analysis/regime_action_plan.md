@@ -3,28 +3,28 @@
 **Objective:** Turn the regime study into concrete maker/hedger changes that push realized PnL back to neutral/positive before enabling premium fees.
 
 ### 1. Trend-Gated Quoting
-- Gate or widen the “danger side” whenever 5-minute price return is below –6 bps, and pause bid quoting for `down_cooldown_seconds` (45 s) after a trigger.
-- Leverage existing `maker.trend` block: add a configurable downside threshold, extra spread additive, and cooldown telemetry.
-- Telemetry: expose gauges for downtrend guard and cooldown status (`maker_trend_down_guard`, `maker_trend_down_cooldown_active`).
+- Gate or widen the “danger side” whenever 5-minute return is below –6 bps, and pause bid quoting for `down_cooldown_seconds` (45 s) after a trigger (config knob baked into this branch).
+- Leverage existing `maker.trend` block: down-threshold, extra spread additive, and telemetry for guard/cooldown (`maker_trend_down_guard`, `maker_trend_down_cooldown_active`).
+- Upcoming: add a symmetric “uptrend” profile that loosens spreads and restores clips when market+PnL signals are favorable.
 
 ### 2. Volatility-Aware Clip Scaling
 - Use minute-level realized vol from `MakerEngine._latest_volatility_bps`.
 - Introduce a second size curve: shrink clips toward exchange minimum as vol crosses the 75th percentile (~0.0009) and pause sizing increases until vol relents.
 - Maintain compatibility with guard scaling and lot quantisation.
 
-### 3. Hedger Tightening
-- Revisit `hedger.trigger_units` and `target_units` to flatten sooner (<0.05 SOL) without over-trading.
-- Add an optional “inventory decay” helper that triggers passive hedges after N seconds even if guard is active (currently 8 s timeout with 0.11 SOL clip ceiling).
+### 3. Hedger Tightening / Safeguard
+- Current defensive profile: `max_clip_units` 0.11, timeout 8 s, telemetry `hedger_force_aggressive`.
+- TODO: add emergency taker flatten if guard stays active past the timeout; reset to lighter clips once inventory clears.
 
 ### 4. Fee Resilience Checks
 - Extend `analysis/regime_analysis.py` or a notebook to simulate maker fee rates (2–4 bps) over the realized PnL windows.
 - Produce a table summarising fee-adjusted hourly PnL so we know the cushion required for premium mode.
 
-### 5. Monitoring & Validation
-- After each change, grab fresh 5-minute slices (`export_pnl_windows.py`) and rerun regime analysis.
-- Track guard activity, realized vs. unrealized PnL, and inventory dwell times to confirm improvements.
-- Document results in `docs/analysis/sol_regimes.md` and update this plan with findings.
-- Monitor the new `maker_fifo_realized_quote` telemetry gauge (and per-market variants) to validate FIFO profits during stressed periods.
+### 5. Regime Detection (New)
+- Build a small detector that classifies the tape into down vs. up/neutral using 1–5 minute returns, realized vol, and FIFO maker PnL.
+- When signals flip “up”, switch to an aggressive profile (larger clips, faster cooldown reset); when signals flip “down”, activate the defensive profile above.
+- Persist both parameter sets and detector thresholds; log switches so we can validate during post-mortems.
+- Continue using `maker_fifo_realized_quote` + guard telemetry to confirm the detector selects the right profile.
 
 ### 6. Optional Explorations
 - Evaluate auto-notional capping during illiquidity (thin book snapshots).

@@ -54,6 +54,16 @@ maker:
     down_bias: ask
     down_cooldown_seconds: 45
     inventory_soft_cap_ratio: 0.6
+  regimes:
+    min_dwell_seconds: 60
+    aggressive:
+      size_multiplier: 1.0
+      extra_spread_bps: 0.0
+      down_cooldown_seconds: 20
+    defensive:
+      size_multiplier: 0.7
+      extra_spread_bps: 2.0
+      down_cooldown_seconds: 45
   exchange_min_notional: 10.5
   pnl_guard:
     enabled: true

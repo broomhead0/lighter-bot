@@ -137,6 +137,7 @@ class MakerEngine:
         self.trend_down_cooldown_seconds = float(
             trend_cfg.get("down_cooldown_seconds", 45.0)
         )
+        self._base_trend_down_cooldown = self.trend_down_cooldown_seconds
         self.trend_inventory_ratio = float(
             trend_cfg.get("inventory_soft_cap_ratio", 0.7)
         )
@@ -144,6 +145,40 @@ class MakerEngine:
         self._trend_state: str = "neutral"
         self._downtrend_cooldown_until: float = 0.0
         self._trend_signal: str = "neutral"
+        regimes_cfg = maker_cfg.get("regimes") or {}
+        aggressive_cfg = regimes_cfg.get("aggressive") or {}
+        defensive_cfg = regimes_cfg.get("defensive") or {}
+
+        def _profile(cfg, default_size, default_spread, default_cooldown):
+            return {
+                "size_multiplier": float(cfg.get("size_multiplier", default_size)),
+                "extra_spread_bps": float(cfg.get("extra_spread_bps", default_spread)),
+                "down_cooldown_seconds": float(
+                    cfg.get("down_cooldown_seconds", default_cooldown)
+                ),
+            }
+
+        self._regime_profiles = {
+            "aggressive": _profile(
+                aggressive_cfg,
+                1.0,
+                0.0,
+                max(0.0, self._base_trend_down_cooldown * 0.4),
+            ),
+            "defensive": _profile(
+                defensive_cfg,
+                0.7,
+                2.0,
+                self._base_trend_down_cooldown if self._base_trend_down_cooldown else 45.0,
+            ),
+        }
+        self._regime_min_dwell = float(regimes_cfg.get("min_dwell_seconds", 60.0))
+        self._current_regime: str = "defensive"
+        self._regime_last_switch: float = time.time()
+        self._regime_size_multiplier: float = 1.0
+        self._regime_spread_bonus: float = 0.0
+        self._apply_regime(self._current_regime, initial=True)
+        self._pnl_guard_active_flag: bool = False
 
         # Cancel discipline tracking
         limits_cfg = maker_cfg.get("limits") or {}
@@ -310,6 +345,8 @@ class MakerEngine:
         base_spread = self._spread_for_volatility(volatility_bps) + max(
             0.0, extra_spread_bps
         )
+        if self._regime_spread_bonus > 0.0:
+            base_spread += self._regime_spread_bonus
         if self.pnl_guard_enabled:
             base_spread += max(0.0, self._pnl_guard_spread_extra)
         jitter = random.uniform(-self.randomize_bps, self.randomize_bps)
@@ -378,7 +415,7 @@ class MakerEngine:
         mid: Optional[float],
         volatility_bps: Optional[float] = None,
     ) -> float:
-        size = self.base_size
+        size = self.base_size * self._regime_size_multiplier
         min_size = max(1e-6, self.min_size)
         max_size = max(min_size, self.max_size)
         inv_soft_cap = max(1e-9, self.inventory_soft_cap)
@@ -540,6 +577,8 @@ class MakerEngine:
             and now < self._downtrend_cooldown_until
         )
 
+        self._maybe_update_regime(now, cooldown_active)
+
         if self._trend_state == "ask_only":
             if inv_abs > inv_limit and current_inv < 0:
                 bias = "both"
@@ -582,6 +621,44 @@ class MakerEngine:
                 pass
 
         return bias, extra_spread
+
+    def _maybe_update_regime(self, now: float, cooldown_active: bool) -> None:
+        target = (
+            "defensive"
+            if cooldown_active or self._trend_signal == "down" or self._pnl_guard_active_flag
+            else "aggressive"
+        )
+        if (
+            target != self._current_regime
+            and (now - self._regime_last_switch) >= self._regime_min_dwell
+        ):
+            self._apply_regime(target)
+
+    def _apply_regime(self, name: str, initial: bool = False) -> None:
+        profile = self._regime_profiles.get(name)
+        if not profile:
+            return
+        self._current_regime = name
+        self._regime_size_multiplier = max(0.1, profile.get("size_multiplier", 1.0))
+        self._regime_spread_bonus = max(0.0, profile.get("extra_spread_bps", 0.0))
+        cooldown = profile.get("down_cooldown_seconds", self._base_trend_down_cooldown)
+        self.trend_down_cooldown_seconds = max(0.0, float(cooldown))
+        self._regime_last_switch = time.time()
+        if self.telemetry:
+            try:
+                self.telemetry.set_gauge(
+                    "maker_regime_state", 1.0 if name == "aggressive" else 0.0
+                )
+            except Exception:
+                pass
+        if not initial:
+            LOG.info(
+                "[maker] regime -> %s (size x%.2f, spread +%.2fbps, cooldown %.0fs)",
+                name,
+                self._regime_size_multiplier,
+                self._regime_spread_bonus,
+                self.trend_down_cooldown_seconds,
+            )
 
     async def _alert(self, level: str, title: str, message: str = ""):
         if getattr(self, "alerts", None) and hasattr(self.alerts, level):
@@ -736,6 +813,7 @@ class MakerEngine:
             self._pnl_guard_spread_extra = 0.0
             self._pnl_guard_size_multiplier = 1.0
             self._pnl_guard_expiry_ts = 0.0
+            self._pnl_guard_active_flag = False
             if self.telemetry:
                 try:
                     self.telemetry.set_gauge("maker_pnl_guard_active", 0.0)
@@ -758,6 +836,7 @@ class MakerEngine:
             self.pnl_guard_min_size_multiplier, min(1.0, float(size_multiplier))
         )
         self._pnl_guard_expiry_ts = time.time() + ttl if ttl > 0 else 0.0
+        self._pnl_guard_active_flag = True
         LOG.warning(
             "[maker] PnL guard engaged: +%.2fbps spread, size x%.2f for %.0fs",
             self._pnl_guard_spread_extra,
@@ -778,6 +857,7 @@ class MakerEngine:
         self._pnl_guard_spread_extra = 0.0
         self._pnl_guard_size_multiplier = 1.0
         self._pnl_guard_expiry_ts = 0.0
+        self._pnl_guard_active_flag = False
         if self.telemetry:
             try:
                 self.telemetry.set_gauge("maker_pnl_guard_active", 0.0)
