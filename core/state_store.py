@@ -37,6 +37,9 @@ class StateStore:
         # Guard block tracking (per market)
         self._guard_block_since: Dict[str, float] = {}
 
+        # Generic flags (runtime signals)
+        self._flags: Dict[str, bool] = {}
+
         # Fee & volume stats
         self._volume_stats = {
             "maker_notional": Decimal("0"),
@@ -151,6 +154,16 @@ class StateStore:
         if market_id is None:
             return dict(self._guard_block_since)
         return self._guard_block_since.get(market_id)
+
+    # -------- Runtime flags ----------
+    def set_flag(self, name: str, value: bool) -> None:
+        self._flags[str(name)] = bool(value)
+
+    def clear_flag(self, name: str) -> None:
+        self._flags.pop(str(name), None)
+
+    def get_flag(self, name: str) -> Optional[bool]:
+        return self._flags.get(str(name))
 
     # -------- Fee & volume stats ----------
     def record_volume_sample(

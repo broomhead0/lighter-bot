@@ -30,11 +30,15 @@
   5. **Fee Simulation & PnL Visibility** – Extend `analysis/regime_analysis.py` (or notebook) to layer in 2–4 bps maker fees and report hourly net; publish FIFO realized PnL via telemetry (`maker_fifo_realized_quote`) before enabling premium points.
 
 ## Next Steps (2025-11-12)
-- Monitor the new guard-aware hedge safeguard (≥10 s block → clip ×1.4, +6 bps cross) and adjust thresholds if it chatters.
-- Watch telemetry (`maker_regime_state`, `maker_fifo_realized_quote`, `maker_trend_down_guard`) over the next live session to verify regime flips and maker edge.
+- Monitor the guard-aware hedge dampers (PnL guard → clip ×0.65, cross 7 bps, cap 9 bps) and emergency mode (≥10 s block → clip ×1.4, +6 bps cross) and adjust thresholds if they chatter.
+- Watch telemetry (`maker_regime_state`, `maker_fifo_realized_quote`, `maker_trend_down_guard`) over the next live session to verify regime flips and maker edge; sample 20 min slices with `export_pnl_windows.py --window 300` for quick feedback.
 - Once an up/neutral stretch appears, evaluate widening the aggressive profile (clips, cooldown) to harvest more rebates.
 - Re-run the 5-minute PnL window export + regime analysis after the next session and fold results into this plan.
   5. **Validation Loop** – After deploy, re-export 5-minute slices and rerun the analyzer; capture before/after snapshots in `docs/analysis/sol_regimes.md`.
+- **Next Check-in Playbook** (pending):
+  - Re-sample 5 min PnL windows + SOL returns (target ≥20 min slices) to confirm maker FIFO trend recovers or adjust taker offsets/cooldowns.
+  - Audit guard telemetry (`maker_guard_block_active`, `hedger_guard_emergency`, `maker_pnl_guard_active`) for any sustained activity during the slice.
+  - If FIFO stays negative while realized cashflow is positive, iterate offsets/clip multipliers and redeploy.
 - **Reference**: `docs/analysis/regime_action_plan.md` holds the detailed workflow.
 # Code Review & Fixes Summary
 

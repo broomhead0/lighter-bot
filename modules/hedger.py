@@ -105,6 +105,15 @@ class Hedger:
                 "guard_emergency_cooldown_seconds", min(self.cooldown_seconds, 1.0)
             )
         )
+        self.guard_clip_multiplier = float(
+            hedger_cfg.get("guard_clip_multiplier", 0.75)
+        )
+        self.guard_price_offset_bps = float(
+            hedger_cfg.get("guard_price_offset_bps", self.price_offset_bps)
+        )
+        self.guard_max_slippage_bps = float(
+            hedger_cfg.get("guard_max_slippage_bps", self.max_slippage_bps)
+        )
 
         # If taker fees are zero (standard tier), force dry-run to avoid accidental cost.
         if self.taker_fee_actual == Decimal("0") and not self._explicit_dry_run:
@@ -231,6 +240,14 @@ class Hedger:
                 except Exception:
                     guard_block_age = None
 
+        pnl_guard_active = False
+        if self.state and hasattr(self.state, "get_flag"):
+            try:
+                flag = self.state.get_flag("pnl_guard_active")
+                pnl_guard_active = bool(flag)
+            except Exception:
+                pnl_guard_active = False
+
         if self.trigger_notional is not None:
             notional = abs_inv * Decimal(str(mid))
             if notional <= self.trigger_notional:
@@ -251,6 +268,12 @@ class Hedger:
             if clip_limit > abs_inv:
                 clip_limit = abs_inv
         hedge_units = min(excess_units, clip_limit)
+        if pnl_guard_active and self.guard_clip_multiplier > 0:
+            try:
+                guard_clip = self.max_clip_units * Decimal(str(self.guard_clip_multiplier))
+                hedge_units = min(hedge_units, guard_clip)
+            except Exception:
+                pass
         if hedge_units <= Decimal("0"):
             return
 
@@ -269,11 +292,12 @@ class Hedger:
             prefer_passive = False
             force_aggressive = self.prefer_passive
 
-        price = self._aggressive_price(
-            mid,
-            side,
-            extra_bps=self.guard_emergency_extra_bps if guard_emergency_active else 0.0,
-        )
+        price_offset_bps = self.price_offset_bps
+        if pnl_guard_active:
+            price_offset_bps = self.guard_price_offset_bps
+        if guard_emergency_active:
+            price_offset_bps += self.guard_emergency_extra_bps
+        price = self._aggressive_price(mid, side, offset_bps=price_offset_bps)
 
         if self.telemetry:
             try:
@@ -289,6 +313,10 @@ class Hedger:
         if guard_emergency_active:
             self._next_allowed_ts = 0.0
 
+        max_slippage_bps = self.max_slippage_bps
+        if pnl_guard_active:
+            max_slippage_bps = self.guard_max_slippage_bps
+
         if time.time() < self._next_allowed_ts:
             LOG.debug("[hedger] cooling down (%.2fs remaining)", self._next_allowed_ts - time.time())
             return
@@ -300,6 +328,7 @@ class Hedger:
             mid=mid,
             abs_inventory=abs_inv,
             prefer_passive=prefer_passive,
+            max_slippage_bps=max_slippage_bps,
         )
         if success and self.telemetry and hasattr(self.telemetry, "touch"):
             try:
@@ -324,8 +353,10 @@ class Hedger:
                 pass
         return None
 
-    def _aggressive_price(self, mid: float, side: str, extra_bps: float = 0.0) -> float:
-        offset_bps = max(0.0, self.price_offset_bps + float(extra_bps))
+    def _aggressive_price(self, mid: float, side: str, offset_bps: Optional[float] = None) -> float:
+        if offset_bps is None:
+            offset_bps = self.price_offset_bps
+        offset_bps = max(0.0, float(offset_bps))
         offset = (offset_bps / 10_000.0) * mid
         if side == "ask":
             return max(0.0, mid - offset)
@@ -345,6 +376,7 @@ class Hedger:
         mid: Optional[float] = None,
         abs_inventory: Decimal = Decimal("0"),
         prefer_passive: Optional[bool] = None,
+        max_slippage_bps: Optional[float] = None,
     ) -> bool:
         size_dec = Decimal(str(size))
         price_dec = Decimal(str(price))
@@ -382,15 +414,12 @@ class Hedger:
         else:
             slip_bps = None
 
-        if (
-            slip_bps is not None
-            and self.max_slippage_bps > 0
-            and float(slip_bps) > self.max_slippage_bps
-        ):
+        slippage_cap = self.max_slippage_bps if max_slippage_bps is None else float(max_slippage_bps)
+        if slip_bps is not None and slippage_cap > 0 and float(slip_bps) > slippage_cap:
             LOG.warning(
                 "[hedger] skipping hedge (slippage %.2fbps exceeds cap %.2fbps)",
                 float(slip_bps),
-                self.max_slippage_bps,
+                slippage_cap,
             )
             return False
 

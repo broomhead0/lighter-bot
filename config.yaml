@@ -83,7 +83,7 @@ hedger:
   trigger_units: 0.05
   trigger_notional: 7.0
   target_units: 0.02
-  max_clip_units: 0.11
+  max_clip_units: 0.10
   price_offset_bps: 10
   max_slippage_bps: 12
   poll_interval_seconds: 1.0
@@ -98,6 +98,9 @@ hedger:
   guard_emergency_clip_multiplier: 1.4
   guard_emergency_extra_bps: 6.0
   guard_emergency_cooldown_seconds: 0.75
+  guard_clip_multiplier: 0.65
+  guard_price_offset_bps: 7.0
+  guard_max_slippage_bps: 9.0
 fees:
   maker_actual_rate: 0.0
   taker_actual_rate: 0.0

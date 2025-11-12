@@ -838,6 +838,7 @@ class MakerEngine:
             self._pnl_guard_size_multiplier = 1.0
             self._pnl_guard_expiry_ts = 0.0
             self._pnl_guard_active_flag = False
+            self._set_pnl_guard_flag(False)
             if self.telemetry:
                 try:
                     self.telemetry.set_gauge("maker_pnl_guard_active", 0.0)
@@ -861,6 +862,7 @@ class MakerEngine:
         )
         self._pnl_guard_expiry_ts = time.time() + ttl if ttl > 0 else 0.0
         self._pnl_guard_active_flag = True
+        self._set_pnl_guard_flag(True)
         LOG.warning(
             "[maker] PnL guard engaged: +%.2fbps spread, size x%.2f for %.0fs",
             self._pnl_guard_spread_extra,
@@ -882,6 +884,7 @@ class MakerEngine:
         self._pnl_guard_size_multiplier = 1.0
         self._pnl_guard_expiry_ts = 0.0
         self._pnl_guard_active_flag = False
+        self._set_pnl_guard_flag(False)
         if self.telemetry:
             try:
                 self.telemetry.set_gauge("maker_pnl_guard_active", 0.0)
@@ -895,6 +898,19 @@ class MakerEngine:
             "expires_at": float(self._pnl_guard_expiry_ts),
             "enabled": float(1.0 if self.pnl_guard_enabled else 0.0),
         }
+
+    def _set_pnl_guard_flag(self, active: bool) -> None:
+        if not self.state:
+            return
+        try:
+            if active:
+                if hasattr(self.state, "set_flag"):
+                    self.state.set_flag("pnl_guard_active", True)
+            else:
+                if hasattr(self.state, "set_flag"):
+                    self.state.set_flag("pnl_guard_active", False)
+        except Exception:
+            pass
 
     def _update_volatility(self, mid: Optional[float]) -> float:
         if not self.vol_enabled or mid is None:
