@@ -33,7 +33,9 @@ maker:
     enabled: true
     low_bps: 6
     high_bps: 22
-    ema_halflife_seconds: 45
+    # Shortened from 45s to 35s for faster response to volatility changes
+    # This helps align internal volatility closer to external market volatility
+    ema_halflife_seconds: 35
     min_spread_bps: 7
     max_spread_bps: 13
     min_size_multiplier: 0.7
@@ -44,8 +46,10 @@ maker:
     high_vol_threshold_bps: 9
     high_vol_size_multiplier: 0.85
     # Pause maker during very low volatility to avoid bleeding on hedging
-    low_vol_pause_threshold_bps: 3.0
-    low_vol_resume_threshold_bps: 4.5
+    # Adjusted based on volatility comparison: external SOL vol ~6.18 bps, internal EMA can lag
+    # Raising threshold so we don't pause during normal trading conditions
+    low_vol_pause_threshold_bps: 4.5
+    low_vol_resume_threshold_bps: 5.5
   trend:
     enabled: true
     lookback_seconds: 45
