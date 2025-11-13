@@ -110,13 +110,22 @@ class MakerEngine:
         self.vol_high_vol_size_multiplier = float(
             vol_cfg.get("high_vol_size_multiplier", 1.0)
         )
+        # Low volatility pause: pause maker when volatility is too low to avoid bleeding on hedging
+        self.vol_low_vol_pause_threshold = float(
+            vol_cfg.get("low_vol_pause_threshold_bps", 3.0)
+        )
+        self.vol_low_vol_resume_threshold = float(
+            vol_cfg.get("low_vol_resume_threshold_bps", 4.5)
+        )
         self.vol_half_life = max(float(vol_cfg.get("ema_halflife_seconds", 30.0)), 1.0)
         self._volatility_ema: Optional[float] = None
         self._volatility_last_mid: Optional[float] = None
         self._volatility_last_ts: float = time.time()
         self._volatility_paused = False
+        self._low_volatility_paused = False
         self._latest_volatility_bps: float = 0.0
         self._volatility_paused_since: Optional[float] = None
+        self._low_volatility_paused_since: Optional[float] = None
 
         trend_cfg = maker_cfg.get("trend") or {}
         self.trend_enabled = bool(trend_cfg.get("enabled", False))
@@ -227,9 +236,15 @@ class MakerEngine:
                 volatility_bps = self._update_volatility(mid)
                 self._latest_volatility_bps = volatility_bps
 
-                if self.vol_enabled and self._volatility_paused:
+                if self.vol_enabled and (self._volatility_paused or self._low_volatility_paused):
+                    pause_reason = (
+                        "high volatility/inventory"
+                        if self._volatility_paused
+                        else "low volatility (hedging costs too high)"
+                    )
                     LOG.debug(
-                        "[maker] skipping quotes due to high volatility/inventory (%.2fbps)",
+                        "[maker] skipping quotes due to %s (%.2fbps)",
+                        pause_reason,
                         volatility_bps,
                     )
                     await self._cancel_all_orders()
@@ -655,7 +670,7 @@ class MakerEngine:
         # 4. Otherwise → aggressive (high volatility, better liquidity)
         vol_bps = self._latest_volatility_bps or 0.0
         low_vol = vol_bps < self._regime_vol_threshold_bps
-        
+
         target = (
             "defensive"
             if (
@@ -958,6 +973,7 @@ class MakerEngine:
 
         vol = float(self._volatility_ema)
         if self.vol_enabled:
+            # High volatility pause (existing logic)
             was_paused = self._volatility_paused
             if not self._volatility_paused and vol >= self.vol_pause_threshold:
                 self._volatility_paused = True
@@ -983,12 +999,49 @@ class MakerEngine:
                     "[maker] volatility pause state changed: %s",
                     "paused" if self._volatility_paused else "active",
                 )
+            
+            # Low volatility pause (new logic): pause maker when volatility is too low
+            # to avoid bleeding on hedging costs
+            was_low_vol_paused = self._low_volatility_paused
+            if (
+                not self._low_volatility_paused
+                and vol <= self.vol_low_vol_pause_threshold
+                and vol > 0.0  # Don't pause if volatility is exactly 0 (startup)
+            ):
+                self._low_volatility_paused = True
+                self._low_volatility_paused_since = time.time()
+                LOG.warning(
+                    "[maker] volatility %.2fbps below low-vol pause threshold %.2fbps; pausing quotes to avoid hedging costs",
+                    vol,
+                    self.vol_low_vol_pause_threshold,
+                )
+            elif (
+                self._low_volatility_paused
+                and vol >= self.vol_low_vol_resume_threshold
+            ):
+                self._low_volatility_paused = False
+                LOG.info(
+                    "[maker] volatility %.2fbps above low-vol resume threshold %.2fbps; resuming quotes",
+                    vol,
+                    self.vol_low_vol_resume_threshold,
+                )
+                self._low_volatility_paused_since = None
+            if self._low_volatility_paused and self._low_volatility_paused_since is None:
+                self._low_volatility_paused_since = time.time()
+            if was_low_vol_paused != self._low_volatility_paused:
+                LOG.debug(
+                    "[maker] low volatility pause state changed: %s",
+                    "paused" if self._low_volatility_paused else "active",
+                )
 
         if self.telemetry:
             try:
                 self.telemetry.set_gauge("maker_volatility_bps", float(vol))
                 self.telemetry.set_gauge(
                     "maker_volatility_paused", 1.0 if self._volatility_paused else 0.0
+                )
+                self.telemetry.set_gauge(
+                    "maker_low_volatility_paused", 1.0 if self._low_volatility_paused else 0.0
                 )
             except Exception:
                 pass
