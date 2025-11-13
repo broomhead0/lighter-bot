@@ -29,6 +29,17 @@
   4. **Adaptive Profiles** – Add dynamic regime switching so the maker engine toggles between defensive and aggressive profiles based on trend/guard signals (`maker_regime_state` telemetry).
   5. **Fee Simulation & PnL Visibility** – Extend `analysis/regime_analysis.py` (or notebook) to layer in 2–4 bps maker fees and report hourly net; publish FIFO realized PnL via telemetry (`maker_fifo_realized_quote`) before enabling premium points.
 
+## 2025-11-13 – Configuration Strategy Fix (IMPORTANT)
+
+- **Problem**: Railway environment variables were overriding `config.yaml` values, causing confusion when changes to config.yaml didn't take effect. AI kept forgetting about Railway variables when context reloaded.
+- **Solution**: 
+  - Removed env override code for ALL trading parameters (maker/hedger config)
+  - All trading parameters now come ONLY from `config.yaml` (version controlled)
+  - Only runtime toggles (dry_run, enabled) and secrets still use env vars
+  - Documented in `docs/CONFIG_STRATEGY.md`
+- **Impact**: Single source of truth (config.yaml), no surprises, easier to track changes
+- **Reference**: `docs/CONFIG_STRATEGY.md` for full details
+
 ## 2025-11-13 – Inventory Tracking Fix
 
 - **Problem**: Hedger wasn't flattening inventory (0.072 SOL) despite being above trigger threshold (0.02 SOL). Investigation revealed:
