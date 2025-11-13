@@ -178,3 +178,51 @@ All critical issues fixed. The bot now:
 
 The bot is ready for further testing and deployment once REST API endpoints are finalized.
 
+## 🧠 KEY LEARNINGS & FINDINGS (Must Reference Before Making Changes)
+
+### Regime Analysis Findings (2025-11-12)
+- **Up-trend (> +0.1%) windows**: Averaged +$16 (favorable)
+- **Down-trend (< -0.1%) windows**: Averaged -$13 (problematic)
+- **Low-vol (≤ 0.0006)**: Yielded +$5.36 quote
+- **Mid/high volatility**: Drove negative PnL
+- **Inventory correlation**: Realized PnL vs base delta ≈ -1.0 (exposure direction drives bleed)
+- **NY Market Hours (high vol)**: Better performance, fewer large crosses, more liquidity
+- **Overnight (low vol)**: Worse performance, more large crosses due to lower liquidity
+
+### Threshold Findings
+- **Internal vs External Volatility**: Internal EMA (45s half-life) can differ significantly from external market volatility
+- **Volatility Thresholds**:
+  - Low-vol pause: 3.0 bps (pause maker when vol < 3.0 bps to avoid hedging costs)
+  - Regime switch: 6.0 bps (switch aggressive/defensive)
+  - High-vol pause: 30 bps (pause maker when vol > 30 bps)
+- **Hedger Findings**: Large crosses (≥0.08 SOL) cost ~$16-18 each and erode maker edge
+
+### Configuration Learnings
+- **Hedger parameters**: Smaller clips (0.06 SOL) + earlier triggers (0.02 SOL) = fewer large crosses
+- **Maker spreads**: 12 bps baseline with volatility-aware adjustments
+- **PnL guard**: Should activate on FIFO realized PnL (not cash flow) to track true maker edge
+- **Regime switching**: Should consider volatility for aggressive/defensive profiles
+
+### Process Learnings
+- **Always run regime analysis** after significant changes or time periods
+- **Compare internal vs external volatility** to validate thresholds
+- **Export PnL windows regularly** to track performance trends
+- **Document findings immediately** in this file and `docs/analysis/sol_regimes.md`
+- **Reference this section before making configuration changes**
+
+### Automation Requirements
+- Run regime analysis after each deploy or daily
+- Compare internal bot volatility with external SOL volatility (Binance 1m candles)
+- Validate thresholds are still appropriate
+- Update learnings section with new findings
+
+### Critical Finding (2025-11-13)
+- **Internal vs External Volatility Discrepancy**: 
+  - Internal bot volatility: 1.96 bps (EMA with 45s half-life)
+  - External SOL volatility (Binance 60m): 6.18 bps
+  - **Impact**: Bot is paused (low-vol pause active) when external market suggests normal trading conditions (6.18 bps > 6.0 bps regime threshold)
+  - **Root Cause**: EMA calculation method differs from external volatility measurement
+  - **Action Needed**: Consider adjusting low-vol pause threshold (3.0 → 4.0-5.0 bps) or using external volatility as sanity check
+  - **Reference**: `docs/analysis/volatility_comparison_2025-11-13.md`
+
+---

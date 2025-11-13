@@ -999,7 +999,7 @@ class MakerEngine:
                     "[maker] volatility pause state changed: %s",
                     "paused" if self._volatility_paused else "active",
                 )
-            
+
             # Low volatility pause (new logic): pause maker when volatility is too low
             # to avoid bleeding on hedging costs
             was_low_vol_paused = self._low_volatility_paused
