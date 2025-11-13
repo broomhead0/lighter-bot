@@ -47,11 +47,11 @@ maker:
     high_vol_threshold_bps: 9
     high_vol_size_multiplier: 0.85
     # Pause maker during very low volatility to avoid bleeding on hedging
-    # Adjusted based on volatility comparison: external SOL vol ~6.18 bps, internal EMA can lag
-    # Lowered threshold: bot was paused at 0.75bps but should trade in low vol to capture edge
-    # Internal EMA can lag external vol significantly, so be more conservative with pause
-    low_vol_pause_threshold_bps: 2.0
-    low_vol_resume_threshold_bps: 3.0
+    # Internal EMA can lag external vol significantly - disable pause for now
+    # Bot needs to trade to make money, even in low vol conditions
+    # Set to 0 to disable low-vol pause (only high-vol pause at 30bps remains active)
+    low_vol_pause_threshold_bps: 0.0
+    low_vol_resume_threshold_bps: 0.1
   trend:
     enabled: true
     lookback_seconds: 45
