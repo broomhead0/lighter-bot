@@ -25,7 +25,8 @@ maker:
   size_min: 0.061
   size_max: 0.072
   exchange_min_size: 0.061
-  inventory_soft_cap: 0.10
+  # Lower soft cap to trigger earlier (findings: inventory buildup causes bleed)
+  inventory_soft_cap: 0.05
   spread_bps: 12.0
   price_scale: 1000
   size_scale: 1000
@@ -54,12 +55,15 @@ maker:
     enabled: true
     lookback_seconds: 45
     threshold_bps: 12
-    down_threshold_bps: 6
+    # Lower threshold to trigger earlier on softer downtrends (findings show -$13/window in downtrends)
+    down_threshold_bps: 4
     resume_threshold_bps: 6
     extra_spread_bps: 2.5
-    down_extra_spread_bps: 6.0
+    # Wider spreads during downtrends to avoid costly fills (findings: downtrends lose $13/window)
+    down_extra_spread_bps: 8.0
     down_bias: ask
-    down_cooldown_seconds: 45
+    # Longer cooldown during downtrends to prevent inventory buildup (findings: inventory = bleed)
+    down_cooldown_seconds: 60
     inventory_soft_cap_ratio: 0.6
   regimes:
     min_dwell_seconds: 60
@@ -74,7 +78,8 @@ maker:
     defensive:
       size_multiplier: 0.7
       extra_spread_bps: 2.0
-      down_cooldown_seconds: 45
+      # Longer cooldown in defensive regime during downtrends (findings: downtrends problematic)
+      down_cooldown_seconds: 60
   exchange_min_notional: 10.5
   pnl_guard:
     enabled: true
@@ -91,10 +96,13 @@ hedger:
   enabled: true
   dry_run: false
   market: market:2
-  trigger_units: 0.02
+  # Hedge earlier to prevent inventory buildup (findings: inventory = bleed, correlation -1.0)
+  trigger_units: 0.015
   trigger_notional: 4.0
-  target_units: 0.005
-  max_clip_units: 0.06
+  # Flatter target to reduce residual inventory (findings: any inventory costs money)
+  target_units: 0.003
+  # Smaller max clip to reduce large crosses (findings: large crosses cost $16-18 each)
+  max_clip_units: 0.04
   price_offset_bps: 10
   max_slippage_bps: 12
   poll_interval_seconds: 1.0
@@ -102,7 +110,8 @@ hedger:
   max_attempts: 3
   retry_backoff_seconds: 2.0
   prefer_passive: true
-  passive_wait_seconds: 0.25
+  # Wait longer for passive fills to reduce costs (findings: large crosses expensive)
+  passive_wait_seconds: 0.5
   passive_offset_bps: 2.0
   passive_timeout_seconds: 6.0
   guard_emergency_seconds: 8.0
@@ -192,3 +201,30 @@ account_listener:
     auth_token: ${WS_AUTH_TOKEN:}
     accounts:
     - 366110
+mean_reversion:
+  enabled: false  # Set to true to enable mean reversion trading
+  dry_run: true  # Set to false for live trading
+  market: market:2  # SOL market
+  # Indicator parameters
+  ema_fast_period: 8
+  ema_slow_period: 21
+  bb_period: 20
+  bb_std: 2.0
+  rsi_period: 14
+  atr_period: 14
+  volume_ma_period: 20
+  # Entry filters
+  bb_touch_threshold: 0.95  # Price must be within 95% of Bollinger Band
+  rsi_oversold: 30.0  # RSI threshold for long entries
+  rsi_overbought: 70.0  # RSI threshold for short entries
+  volume_multiplier: 1.2  # Volume must be 1.2x average
+  vol_min_bps: 4.0  # Minimum volatility to trade (avoid dead markets)
+  vol_max_bps: 25.0  # Maximum volatility to trade (avoid chaos)
+  trend_filter_bps: 15.0  # Max EMA divergence (avoid strong trends)
+  # Risk management
+  take_profit_bps: 3.0  # Target profit in basis points
+  stop_loss_bps: 6.0  # Stop loss in basis points
+  max_hold_minutes: 5  # Maximum time to hold position
+  risk_per_trade_pct: 1.0  # Risk 1% of capital per trade
+  max_position_size: 0.1  # Maximum SOL per trade
+  min_position_size: 0.01  # Minimum SOL per trade
