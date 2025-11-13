@@ -71,6 +71,11 @@ try:
 except Exception:  # noqa
     AccountListener = None  # type: ignore
 
+try:
+    from modules.mean_reversion_trader import MeanReversionTrader
+except Exception:  # noqa
+    MeanReversionTrader = None  # type: ignore
+
 from core.trading_client import TradingClient, TradingConfig
 
 try:
@@ -143,6 +148,7 @@ def setup_logging():
         "optimizer",
         "selector",
         "compat",
+        "mean_reversion",
     ):
         logging.getLogger(name).setLevel(level)
 
@@ -177,30 +183,13 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
         (("api", "api_key_index"), "API_KEY_INDEX", "int"),
         (("api", "max_api_key_index"), "MAX_API_KEY_INDEX", "int"),
         (("api", "nonce_management"), "NONCE_MANAGEMENT", "str"),
-        (("maker", "dry_run"), "MAKER_DRY_RUN", "bool"),
-        (("maker", "pair"), "MAKER_PAIR", "str"),
-        (("maker", "size"), "MAKER_SIZE", "float"),
-        (("maker", "spread_bps"), "MAKER_SPREAD_BPS", "float"),
-        (("maker", "refresh_seconds"), "MAKER_REFRESH_SECONDS", "float"),
-        (("maker", "randomize_bps"), "MAKER_RANDOMIZE_BPS", "float"),
-        (("maker", "price_scale"), "MAKER_PRICE_SCALE", "float"),
-        (("maker", "size_scale"), "MAKER_SIZE_SCALE", "float"),
-        (("maker", "exchange_min_notional"), "MAKER_EXCHANGE_MIN_NOTIONAL", "float"),
-        (("maker", "limits", "max_cancels"), "MAKER_LIMITS_MAX_CANCELS", "int"),
-        (("maker", "limits", "max_latency_ms"), "MAKER_LIMITS_MAX_LATENCY_MS", "int"),
-        (("hedger", "enabled"), "HEDGER_ENABLED", "bool"),
-        (("hedger", "dry_run"), "HEDGER_DRY_RUN", "bool"),
-        (("hedger", "market"), "HEDGER_MARKET", "str"),
-        (("hedger", "trigger_units"), "HEDGER_TRIGGER_UNITS", "float"),
-        (("hedger", "trigger_notional"), "HEDGER_TRIGGER_NOTIONAL", "float"),
-        (("hedger", "target_units"), "HEDGER_TARGET_UNITS", "float"),
-        (("hedger", "max_clip_units"), "HEDGER_MAX_CLIP_UNITS", "float"),
-        (("hedger", "price_offset_bps"), "HEDGER_PRICE_OFFSET_BPS", "float"),
-        (("hedger", "poll_interval_seconds"), "HEDGER_POLL_INTERVAL_SECONDS", "float"),
-        (("hedger", "cooldown_seconds"), "HEDGER_COOLDOWN_SECONDS", "float"),
-        (("hedger", "max_attempts"), "HEDGER_MAX_ATTEMPTS", "int"),
-        (("hedger", "retry_backoff_seconds"), "HEDGER_RETRY_BACKOFF_SECONDS", "float"),
-        (("hedger", "trigger_notional"), "HEDGER_TRIGGER_NOTIONAL", "float"),
+        # Trading parameters should ONLY come from config.yaml (version controlled)
+        # Removed env overrides for: MAKER_*, HEDGER_* (except enabled/dry_run/market)
+        # This prevents Railway variables from overriding config.yaml and causing confusion
+        (("maker", "dry_run"), "MAKER_DRY_RUN", "bool"),  # Keep: runtime safety toggle
+        (("hedger", "enabled"), "HEDGER_ENABLED", "bool"),  # Keep: runtime enable/disable
+        (("hedger", "dry_run"), "HEDGER_DRY_RUN", "bool"),  # Keep: runtime safety toggle
+        (("hedger", "market"), "HEDGER_MARKET", "str"),  # Keep: might vary by deployment
         (("fees", "maker_actual_rate"), "FEES_MAKER_ACTUAL_RATE", "float"),
         (("fees", "taker_actual_rate"), "FEES_TAKER_ACTUAL_RATE", "float"),
         (("fees", "maker_premium_rate"), "FEES_MAKER_PREMIUM_RATE", "float"),
@@ -225,6 +214,8 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
         (("optimizer", "top_n"), "OPTIMIZER_TOP_N", "int"),
         (("optimizer", "scan_interval_s"), "OPTIMIZER_SCAN_INTERVAL_S", "int"),
         (("optimizer", "min_dwell_s"), "OPTIMIZER_MIN_DWELL_S", "int"),
+        (("mean_reversion", "enabled"), "MEAN_REVERSION_ENABLED", "bool"),
+        (("mean_reversion", "dry_run"), "MEAN_REVERSION_DRY_RUN", "bool"),
     ]
 
     for path, env_name, kind in specs:
@@ -1101,6 +1092,26 @@ async def main():
                 run_component("account_listener", account_listener)
             )
         )
+
+    # --- Mean Reversion Trader ---
+    mean_reversion_trader = None
+    if MeanReversionTrader:
+        trader_cfg = cfg.get("mean_reversion") or {}
+        if bool(trader_cfg.get("enabled", False)):
+            try:
+                mean_reversion_trader = MeanReversionTrader(
+                    config=cfg,
+                    state=state,
+                    trading_client=shared_trading_client,
+                    alert_manager=alert_mgr,
+                    telemetry=telemetry,
+                )
+                logging.getLogger("main").info("[main] MeanReversionTrader initialized")
+            except Exception as exc:
+                logging.getLogger("main").warning("[main] MeanReversionTrader init failed: %s", exc)
+
+    if mean_reversion_trader:
+        tasks.append(asyncio.create_task(run_component("mean_reversion", mean_reversion_trader)))
 
     # --- Watchdogs (M7) ---
     wd_cfg = cfg.get("watchdogs") or {}
