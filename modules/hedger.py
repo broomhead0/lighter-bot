@@ -166,9 +166,22 @@ class Hedger:
     # ------------------------------------------------------------------ private
 
     async def _run_loop(self) -> None:
+        last_heartbeat = 0.0
         try:
             while not self._stop.is_set():
                 try:
+                    # Heartbeat every 60 seconds to confirm loop is running
+                    now = time.time()
+                    if now - last_heartbeat > 60.0:
+                        inv = None
+                        if self.state and hasattr(self.state, "get_inventory"):
+                            try:
+                                inv = self.state.get_inventory(self.market)
+                            except Exception:
+                                pass
+                        LOG.debug("[hedger] loop heartbeat: enabled=%s inv=%s", self.enabled, inv)
+                        last_heartbeat = now
+                    
                     await self._maybe_hedge()
                 except Exception as exc:
                     LOG.exception("[hedger] loop error: %s", exc)
@@ -193,6 +206,7 @@ class Hedger:
 
         inventory = self.state.get_inventory(self.market)
         if inventory is None:
+            LOG.debug("[hedger] inventory is None for %s", self.market)
             return
         if not isinstance(inventory, Decimal):
             try:
@@ -203,6 +217,17 @@ class Hedger:
 
         abs_inv = abs(inventory)
         now = time.time()
+        
+        # Log inventory check for debugging (always log when significantly over threshold)
+        if abs_inv > self.trigger_units * Decimal("1.5"):  # Only log when significantly over trigger
+            LOG.info(
+                "[hedger] inventory check: inv=%.4f trigger=%.4f target=%.4f (over threshold by %.4f)",
+                float(abs_inv),
+                float(self.trigger_units),
+                float(self.target_units),
+                float(abs_inv - self.trigger_units),
+            )
+        
         if abs_inv <= self.trigger_units:
             self._over_trigger_since = None
             if self.telemetry:
@@ -214,10 +239,11 @@ class Hedger:
             return
         if self._over_trigger_since is None:
             self._over_trigger_since = now
+            LOG.info("[hedger] inventory exceeded trigger: %.4f > %.4f", float(abs_inv), float(self.trigger_units))
 
         mid = self._get_mid_price()
         if mid is None:
-            LOG.debug("[hedger] no mid price available for %s", self.market)
+            LOG.warning("[hedger] no mid price available for %s", self.market)
             return
 
         guard_block_age = None
@@ -237,6 +263,7 @@ class Hedger:
                     guard_block_age = now - guard_ts
                     if guard_block_age >= self.guard_emergency_seconds:
                         guard_emergency_active = True
+                        LOG.warning("[hedger] guard emergency active: block_age=%.1fs", guard_block_age)
                 except Exception:
                     guard_block_age = None
 
@@ -251,10 +278,13 @@ class Hedger:
         if self.trigger_notional is not None:
             notional = abs_inv * Decimal(str(mid))
             if notional <= self.trigger_notional:
+                LOG.debug("[hedger] notional check failed: %.2f <= %.2f", float(notional), float(self.trigger_notional))
                 return
+            LOG.debug("[hedger] notional check passed: %.2f > %.2f", float(notional), float(self.trigger_notional))
 
         excess_units = abs_inv - self.target_units
         if excess_units <= Decimal("0"):
+            LOG.debug("[hedger] excess units <= 0: %.4f", float(excess_units))
             return
 
         clip_limit = self.max_clip_units
@@ -268,13 +298,19 @@ class Hedger:
             if clip_limit > abs_inv:
                 clip_limit = abs_inv
         hedge_units = min(excess_units, clip_limit)
+        LOG.debug("[hedger] initial hedge_units: %.4f (excess=%.4f, clip_limit=%.4f)", 
+                  float(hedge_units), float(excess_units), float(clip_limit))
+        
         if pnl_guard_active and self.guard_clip_multiplier > 0:
             try:
                 guard_clip = self.max_clip_units * Decimal(str(self.guard_clip_multiplier))
                 hedge_units = min(hedge_units, guard_clip)
+                LOG.debug("[hedger] pnl guard active, reduced hedge_units to: %.4f (guard_clip=%.4f)",
+                          float(hedge_units), float(guard_clip))
             except Exception:
                 pass
         if hedge_units <= Decimal("0"):
+            LOG.warning("[hedger] hedge_units <= 0 after guard adjustment: %.4f", float(hedge_units))
             return
 
         side = "ask" if inventory > 0 else "bid"
@@ -318,9 +354,13 @@ class Hedger:
             max_slippage_bps = self.guard_max_slippage_bps
 
         if time.time() < self._next_allowed_ts:
-            LOG.debug("[hedger] cooling down (%.2fs remaining)", self._next_allowed_ts - time.time())
+            remaining = self._next_allowed_ts - time.time()
+            LOG.info("[hedger] cooling down (%.2fs remaining, inv=%.4f, hedge_units=%.4f)", 
+                     remaining, float(abs_inv), float(hedge_units))
             return
 
+        LOG.info("[hedger] executing hedge: side=%s units=%.4f price=%.4f inv=%.4f mid=%.4f",
+                 side, float(hedge_units), price, float(abs_inv), mid)
         success = await self._execute_hedge(
             side=side,
             size=float(hedge_units),
