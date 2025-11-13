@@ -173,6 +173,7 @@ class MakerEngine:
             ),
         }
         self._regime_min_dwell = float(regimes_cfg.get("min_dwell_seconds", 60.0))
+        self._regime_vol_threshold_bps = float(regimes_cfg.get("vol_threshold_bps", 8.0))
         self._current_regime: str = "defensive"
         self._regime_last_switch: float = time.time()
         self._regime_size_multiplier: float = 1.0
@@ -647,9 +648,22 @@ class MakerEngine:
         return bias, extra_spread
 
     def _maybe_update_regime(self, now: float, cooldown_active: bool) -> None:
+        # Regime switching priority:
+        # 1. PnL guard active → defensive (highest priority)
+        # 2. Downtrend cooldown or trend signal down → defensive
+        # 3. Low volatility (< threshold) → defensive (overnight, need careful hedging)
+        # 4. Otherwise → aggressive (high volatility, better liquidity)
+        vol_bps = self._latest_volatility_bps or 0.0
+        low_vol = vol_bps < self._regime_vol_threshold_bps
+        
         target = (
             "defensive"
-            if cooldown_active or self._trend_signal == "down" or self._pnl_guard_active_flag
+            if (
+                self._pnl_guard_active_flag
+                or cooldown_active
+                or self._trend_signal == "down"
+                or low_vol
+            )
             else "aggressive"
         )
         if (
