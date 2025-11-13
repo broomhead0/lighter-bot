@@ -217,12 +217,12 @@ The bot is ready for further testing and deployment once REST API endpoints are 
 - Update learnings section with new findings
 
 ### Critical Finding (2025-11-13) - RESOLVED
-- **Internal vs External Volatility Discrepancy**: 
+- **Internal vs External Volatility Discrepancy**:
   - Internal bot volatility: 1.96 bps (EMA with 45s half-life)
   - External SOL volatility (Binance 60m): 6.18 bps
   - **Impact**: Bot is paused (low-vol pause active) when external market suggests normal trading conditions (6.18 bps > 6.0 bps regime threshold)
   - **Root Cause**: EMA calculation method differs from external volatility measurement
-  - **Action Taken**: 
+  - **Action Taken**:
     - Adjusted low-vol pause threshold: 3.0 → 4.5 bps
     - Adjusted low-vol resume threshold: 4.5 → 5.5 bps (hysteresis)
     - Shortened EMA half-life: 45s → 35s (faster response)
