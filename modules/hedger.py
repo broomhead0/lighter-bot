@@ -206,13 +206,13 @@ class Hedger:
 
         inventory = self.state.get_inventory(self.market)
         if inventory is None:
-            LOG.debug("[hedger] inventory is None for %s", self.market)
+            LOG.warning("[hedger] inventory is None for %s (StateStore may not be tracking)", self.market)
             return
         if not isinstance(inventory, Decimal):
             try:
                 inventory = Decimal(str(inventory))
             except Exception:
-                LOG.debug("[hedger] inventory not decimal: %s", inventory)
+                LOG.warning("[hedger] inventory not decimal: %s", inventory)
                 return
 
         abs_inv = abs(inventory)
@@ -227,6 +227,9 @@ class Hedger:
                 float(self.target_units),
                 float(abs_inv - self.trigger_units),
             )
+        elif abs_inv > 0:
+            LOG.debug("[hedger] inventory below trigger: inv=%.4f trigger=%.4f", 
+                     float(abs_inv), float(self.trigger_units))
         
         if abs_inv <= self.trigger_units:
             self._over_trigger_since = None
