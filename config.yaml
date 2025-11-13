@@ -80,14 +80,14 @@ hedger:
   enabled: true
   dry_run: false
   market: market:2
-  trigger_units: 0.04
-  trigger_notional: 7.0
-  target_units: 0.015
-  max_clip_units: 0.10
+  trigger_units: 0.03
+  trigger_notional: 5.0
+  target_units: 0.010
+  max_clip_units: 0.08
   price_offset_bps: 10
   max_slippage_bps: 12
   poll_interval_seconds: 1.0
-  cooldown_seconds: 6.0
+  cooldown_seconds: 4.0
   max_attempts: 3
   retry_backoff_seconds: 2.0
   prefer_passive: true
@@ -95,10 +95,10 @@ hedger:
   passive_offset_bps: 2.0
   passive_timeout_seconds: 8.0
   guard_emergency_seconds: 10.0
-  guard_emergency_clip_multiplier: 1.4
+  guard_emergency_clip_multiplier: 1.2
   guard_emergency_extra_bps: 6.0
   guard_emergency_cooldown_seconds: 0.75
-  guard_clip_multiplier: 0.50
+  guard_clip_multiplier: 0.40
   guard_price_offset_bps: 9.0
   guard_max_slippage_bps: 9.0
 fees:
