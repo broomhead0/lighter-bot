@@ -211,18 +211,13 @@ class AccountListener:
             for market_id, entry in positions.items():
                 self._handle_position_entry(market_id, entry)
                 seen.add(str(market_id))
-            # Only reset markets not in positions dict if we got an empty positions dict
-            # Don't reset if positions dict exists but doesn't include a market - that market
-            # might not have been included in the update, not necessarily zero
-            if len(positions) == 0:
-                for market in self._tracked_markets():
+            # Reset inventory for tracked markets not present in positions update
+            # This ensures StateStore stays in sync with exchange positions
+            for market in self._tracked_markets():
+                key = market.split(":", 1)[-1]
+                if key not in seen:
                     self._reset_position(market)
-        elif positions is None:
-            # No positions key at all - don't reset, positions might not be included in this update
-            pass
         else:
-            # Invalid positions type - reset all to be safe
-            LOG.warning("[account] invalid positions type in account update: %s", type(positions))
             for market in self._tracked_markets():
                 self._reset_position(market)
 
@@ -473,9 +468,6 @@ class AccountListener:
             return
         position = entry.get("position")
         if position is None:
-            # Only reset if we explicitly get None - don't reset on missing keys
-            # This prevents stale position updates from resetting inventory tracked via fills
-            LOG.debug("[account] position entry has None position for %s, resetting inventory", market)
             self._reset_position(market)
             return
         try:
@@ -493,7 +485,6 @@ class AccountListener:
         except Exception:
             pass
         self._set_inventory(market, value)
-        LOG.debug("[account] position entry updated %s inventory to %s", market, value)
 
     def _compute_base_delta(self, fill: FillRecord) -> Decimal:
         size = Decimal(fill.size)
