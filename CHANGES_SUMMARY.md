@@ -29,6 +29,23 @@
   4. **Adaptive Profiles** – Add dynamic regime switching so the maker engine toggles between defensive and aggressive profiles based on trend/guard signals (`maker_regime_state` telemetry).
   5. **Fee Simulation & PnL Visibility** – Extend `analysis/regime_analysis.py` (or notebook) to layer in 2–4 bps maker fees and report hourly net; publish FIFO realized PnL via telemetry (`maker_fifo_realized_quote`) before enabling premium points.
 
+## 2025-11-13 – Inventory Tracking Fix
+
+- **Problem**: Hedger wasn't flattening inventory (0.072 SOL) despite being above trigger threshold (0.02 SOL). Investigation revealed:
+  - Position reset logic was too aggressive: it reset inventory for markets missing from positions dict
+  - If exchange sent position update without SOL, inventory would reset to 0 in StateStore
+  - Metrics continued tracking inventory from fills, causing mismatch
+  - Hedger couldn't see inventory because StateStore showed 0
+- **Fix**:
+  - Modified `_handle_account_all` to only reset inventory if positions dict is explicitly empty
+  - Don't reset for markets missing from positions dict (they might not be included in update, not necessarily zero)
+  - Added comprehensive hedger logging to track:
+    - When _maybe_hedge is called with significant inventory
+    - Inventory checks, notional checks, hedge unit calculations
+    - Cooldown status and hedge execution attempts
+    - Loop heartbeat every 60s to confirm hedger is running
+- **Expected Impact**: Inventory should now stay in sync between StateStore (from fills) and hedger, allowing hedger to flatten inventory correctly
+
 ## Next Steps (2025-11-12)
 - Monitor the guard-aware hedge dampers (PnL guard → clip ×0.50, cross 8 bps, cap 9 bps) and emergency mode (≥10 s block → clip ×1.4, +6 bps cross) and adjust thresholds if they chatter.
 - Watch telemetry (`maker_regime_state`, `maker_fifo_realized_quote`, `maker_trend_down_guard`) over the next live session to verify regime flips and maker edge; sample 20 min slices with `export_pnl_windows.py --window 300` for quick feedback.
