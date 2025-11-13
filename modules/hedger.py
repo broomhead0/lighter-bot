@@ -204,7 +204,18 @@ class Hedger:
             LOG.debug("[hedger] state store missing inventory")
             return
 
-        inventory = self.state.get_inventory(self.market)
+        # Log every call when inventory might be significant (to confirm loop is running)
+        inventory_raw = self.state.get_inventory(self.market)
+        if inventory_raw is not None:
+            try:
+                inv_abs = abs(float(str(inventory_raw)))
+                trigger_half = float(self.trigger_units) * 0.5
+                if inv_abs > trigger_half:  # Log if inventory > 50% of trigger
+                    LOG.debug("[hedger] _maybe_hedge called: inv_raw=%s", inventory_raw)
+            except Exception:
+                pass
+        
+        inventory = inventory_raw
         if inventory is None:
             LOG.warning("[hedger] inventory is None for %s (StateStore may not be tracking)", self.market)
             return
