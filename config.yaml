@@ -80,7 +80,7 @@ hedger:
   enabled: true
   dry_run: false
   market: market:2
-  trigger_units: 0.05
+  trigger_units: 0.04
   trigger_notional: 7.0
   target_units: 0.015
   max_clip_units: 0.10
@@ -98,8 +98,8 @@ hedger:
   guard_emergency_clip_multiplier: 1.4
   guard_emergency_extra_bps: 6.0
   guard_emergency_cooldown_seconds: 0.75
-  guard_clip_multiplier: 0.65
-  guard_price_offset_bps: 8.0
+  guard_clip_multiplier: 0.50
+  guard_price_offset_bps: 9.0
   guard_max_slippage_bps: 9.0
 fees:
   maker_actual_rate: 0.0
