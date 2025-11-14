@@ -33,12 +33,21 @@
 
 - **Problem**: Railway environment variables were overriding `config.yaml` values, causing confusion when changes to config.yaml didn't take effect. AI kept forgetting about Railway variables when context reloaded.
 - **Solution**: 
-  - Removed env override code for ALL trading parameters (maker/hedger config)
+  - Removed env override code for ALL trading parameters (maker/hedger/guard config)
   - All trading parameters now come ONLY from `config.yaml` (version controlled)
   - Only runtime toggles (dry_run, enabled) and secrets still use env vars
-  - Documented in `docs/CONFIG_STRATEGY.md`
+  - Comprehensive audit performed and documented
 - **Impact**: Single source of truth (config.yaml), no surprises, easier to track changes
-- **Reference**: `docs/CONFIG_STRATEGY.md` for full details
+- **References**: 
+  - `docs/CONFIG_STRATEGY.md` - Configuration strategy overview
+  - `docs/CONFIG_AUDIT.md` - Comprehensive audit with all gotchas and recommendations
+- **Fixed**:
+  - Maker/hedger trading parameters (trigger_units, max_clip_units, spread_bps, etc.)
+  - Guard trading parameters (price_band_bps, max_position_units, max_inventory_notional)
+- **Known Gotchas** (documented in audit):
+  - Hardcoded defaults in modules (acceptable, fail-safe)
+  - WS URL fallback to env (acceptable, deployment flexibility)
+  - Fee config overrides (acceptable, for account switching)
 
 ## 2025-11-13 – Inventory Tracking Fix
 
