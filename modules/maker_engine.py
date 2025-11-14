@@ -288,8 +288,22 @@ class MakerEngine:
                 elif inventory_abs > Decimal("0.01"):
                     inventory_size_multiplier = 0.75
 
+                # Compute base quote size (includes PnL guard multiplier inside)
                 quote_size = self._compute_quote_size(mid, volatility_bps)
+                
+                # Apply inventory size multiplier (after PnL guard but before final quantization)
                 quote_size *= inventory_size_multiplier
+                
+                # CRITICAL: Ensure size never goes below exchange minimum after ALL multipliers
+                # This can happen when: base_size (0.064) * pnl_guard (0.85) * inventory (0.75) = 0.0408
+                original_size = quote_size
+                if quote_size < self.exchange_min_size:
+                    quote_size = self.exchange_min_size
+                    LOG.debug(
+                        "[maker] size quantization: adjusted from %.6f to %.6f (exchange minimum)",
+                        original_size,
+                        quote_size
+                    )
 
                 # Check cancel discipline (throttle if exceeded)
                 self._check_cancel_discipline()
@@ -352,12 +366,12 @@ class MakerEngine:
 
                 place_bid = trend_bias in ("both", "bid")
                 place_ask = trend_bias in ("both", "ask")
-                
+
                 # Phase 2: Asymmetric quoting based on inventory
                 # If inventory exists, stop quoting the side that adds to position
                 # Work WITH hedger instead of against it
                 asymmetric_threshold = Decimal("0.01")  # 0.01 SOL threshold
-                
+
                 if inventory_abs > asymmetric_threshold:
                     if inventory > 0:  # Long inventory
                         # Stop placing bids (don't add to long position)
@@ -377,7 +391,7 @@ class MakerEngine:
                                 float(inventory)
                             )
                         place_ask = False
-                
+
                 if not place_bid and not place_ask:
                     LOG.debug("[maker] trend/inventory filter skipping both sides")
                     await self._cancel_all_orders()
