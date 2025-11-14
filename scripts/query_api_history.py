@@ -61,7 +61,11 @@ async def query_fills_via_api():
         f"/api/v1/account/{account_index}/trades",
         f"/api/v1/orders?account={account_index}",
         f"/api/v1/fills?account={account_index}",
-        f"/api/v1/trades?account={account_index}",
+        # Trades endpoint (requires sort_by and limit)
+        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=10000",
+        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=50000",
+        f"/api/v1/trades?account={account_index}&sort_by=block_height&limit=10000",
+        f"/api/v1/trades?account={account_index}&sort_by=trade_id&limit=10000",
         # Alternative patterns
         f"/api/account/{account_index}/orders",
         f"/api/account/{account_index}/fills",
