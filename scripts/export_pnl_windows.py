@@ -55,12 +55,12 @@ def aggregate_windows(
 ) -> List[Mapping[str, object]]:
     buckets: Dict[int, Dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     meta: Dict[int, Dict[str, object]] = defaultdict(dict)
-    
+
     # Track FIFO lots per market for realized PnL calculation
     from collections import deque
     fifo_lots: Dict[str, deque] = defaultdict(deque)  # market -> deque of (size, price)
     inventory: Dict[str, Decimal] = defaultdict(Decimal)  # market -> inventory
-    
+
     # Track last mid price per market for unrealized PnL
     last_mid: Dict[str, Decimal] = {}  # market -> last mid price
 
@@ -85,52 +85,57 @@ def aggregate_windows(
         # Track inventory
         inventory[event.market] += numbers["base_delta"]
         entry["inventory_at_end"] = inventory[event.market]
-        
+
         # Track mid price
         if numbers.get("mid_price") is not None:
             last_mid[event.market] = numbers["mid_price"]
 
-        # Calculate FIFO realized PnL (only for maker fills)
-        if event.role.lower() == "maker":
-            lots = fifo_lots[event.market]
-            base_delta = numbers["base_delta"]
-            fill_price = numbers["price"]
-            fee_actual = numbers["fee_paid"]
-            realized = Decimal("0")
+        # Calculate FIFO realized PnL for ALL fills (maker + hedger both affect positions!)
+        # Maker fills: open positions (should match FIFO)
+        # Hedger fills: close positions (should ALSO match FIFO to realize PnL!)
+        # Note: account_listener only processes maker fills, but for export we process ALL fills
+        
+        # Process ALL fills for FIFO matching (not just maker)
+        # This ensures hedger trades also realize PnL correctly
+        lots = fifo_lots[event.market]
+        base_delta = numbers["base_delta"]
+        fill_price = numbers["price"]
+        fee_actual = numbers["fee_paid"]
+        realized = Decimal("0")
 
-            if base_delta > 0:  # Buying (closing shorts or opening longs)
-                remaining = base_delta
-                while lots and lots[0][0] < 0 and remaining > 0:
-                    short_lot = lots[0]
-                    lot_size, lot_price = short_lot
-                    matched = min(remaining, -lot_size)
-                    realized += (lot_price - fill_price) * matched  # Profit when covering shorts
-                    lot_size += matched  # lot_size is negative
-                    remaining -= matched
-                    if lot_size == 0:
-                        lots.popleft()
-                    else:
-                        short_lot[0] = lot_size
-                if remaining > 0:
-                    lots.append([remaining, fill_price])  # Opening new long position
-            elif base_delta < 0:  # Selling (closing longs or opening shorts)
-                remaining = -base_delta
-                while lots and lots[0][0] > 0 and remaining > 0:
-                    long_lot = lots[0]
-                    lot_size, lot_price = long_lot
-                    matched = min(remaining, lot_size)
-                    realized += (fill_price - lot_price) * matched  # Profit when closing longs
-                    lot_size -= matched
-                    remaining -= matched
-                    if lot_size == 0:
-                        lots.popleft()
-                    else:
-                        long_lot[0] = lot_size
-                if remaining > 0:
-                    lots.appendleft([-remaining, fill_price])  # Opening new short position
+        if base_delta > 0:  # Buying (closing shorts or opening longs)
+            remaining = base_delta
+            while lots and lots[0][0] < 0 and remaining > 0:
+                short_lot = lots[0]
+                lot_size, lot_price = short_lot
+                matched = min(remaining, -lot_size)
+                realized += (lot_price - fill_price) * matched  # Profit when covering shorts
+                lot_size += matched  # lot_size is negative
+                remaining -= matched
+                if lot_size == 0:
+                    lots.popleft()
+                else:
+                    short_lot[0] = lot_size
+            if remaining > 0:
+                lots.append([remaining, fill_price])  # Opening new long position
+        elif base_delta < 0:  # Selling (closing longs or opening shorts)
+            remaining = -base_delta
+            while lots and lots[0][0] > 0 and remaining > 0:
+                long_lot = lots[0]
+                lot_size, lot_price = long_lot
+                matched = min(remaining, lot_size)
+                realized += (fill_price - lot_price) * matched  # Profit when closing longs
+                lot_size -= matched
+                remaining -= matched
+                if lot_size == 0:
+                    lots.popleft()
+                else:
+                    long_lot[0] = lot_size
+            if remaining > 0:
+                lots.appendleft([-remaining, fill_price])  # Opening new short position
 
-            realized -= fee_actual  # Subtract fees
-            entry["fifo_realized_quote"] = entry.get("fifo_realized_quote", Decimal("0")) + realized
+        realized -= fee_actual  # Subtract fees
+        entry["fifo_realized_quote"] = entry.get("fifo_realized_quote", Decimal("0")) + realized
 
         # Track first/last timestamps for readability
         meta_bucket = meta[bucket]
@@ -143,16 +148,16 @@ def aggregate_windows(
 
     rows: List[Mapping[str, object]] = []
     cumulative_fifo_realized: Dict[str, Decimal] = defaultdict(Decimal)  # Track cumulative FIFO realized per market
-    
+
     for bucket in sorted(buckets.keys()):
         entry = buckets[bucket]
         info = meta[bucket]
         market = info.get("market", "")
-        
+
         # Get FIFO realized PnL for this window (delta from previous)
         fifo_realized_delta = float(entry.get("fifo_realized_quote", Decimal("0")))
         cumulative_fifo_realized[market] += Decimal(str(fifo_realized_delta))
-        
+
         # Calculate unrealized PnL at end of window
         # unrealized = sum(lot_size * (current_mid - lot_cost_basis)) for all open lots
         unrealized = Decimal("0")
@@ -170,10 +175,10 @@ def aggregate_windows(
                     unrealized += lot_size * (mid - lot_price)
                 else:  # Short position (lot_size is negative)
                     unrealized += lot_size * (mid - lot_price)  # lot_size is negative, so this works
-        
+
         # True PnL = FIFO realized + unrealized
         true_pnl = cumulative_fifo_realized[market] + unrealized
-        
+
         rows.append(
             {
                 "bucket_start_ts": bucket,
