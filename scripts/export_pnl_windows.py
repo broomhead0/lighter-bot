@@ -94,7 +94,7 @@ def aggregate_windows(
         # Maker fills: open positions (should match FIFO)
         # Hedger fills: close positions (should ALSO match FIFO to realize PnL!)
         # Note: account_listener only processes maker fills, but for export we process ALL fills
-        
+
         # Process ALL fills for FIFO matching (not just maker)
         # This ensures hedger trades also realize PnL correctly
         lots = fifo_lots[event.market]
