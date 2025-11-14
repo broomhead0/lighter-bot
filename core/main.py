@@ -201,13 +201,13 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
         (("watchdogs", "ws_stale_seconds"), "WATCHDOG_WS_STALE_SECONDS", "int"),
         (("watchdogs", "quote_stale_seconds"), "WATCHDOG_QUOTE_STALE_SECONDS", "int"),
         (("watchdogs", "reminder_every_seconds"), "WATCHDOG_REMINDER_EVERY_SECONDS", "int"),
-        (("guard", "price_band_bps"), "GUARD_PRICE_BAND_BPS", "float"),
-        (("guard", "crossed_book_protection"), "GUARD_CROSSED_BOOK_PROTECTION", "bool"),
-        (("guard", "max_position_units"), "GUARD_MAX_POSITION_UNITS", "float"),
-        (("guard", "max_inventory_notional"), "GUARD_MAX_INVENTORY_NOTIONAL", "float"),
-        (("guard", "kill_on_crossed_book"), "GUARD_KILL_ON_CROSSED_BOOK", "bool"),
-        (("guard", "kill_on_inventory_breach"), "GUARD_KILL_ON_INVENTORY_BREACH", "bool"),
-        (("guard", "backoff_seconds_on_block"), "GUARD_BACKOFF_SECONDS_ON_BLOCK", "int"),
+        # Guard trading parameters should ONLY come from config.yaml (version controlled)
+        # Removed env overrides for: GUARD_PRICE_BAND_BPS, GUARD_MAX_POSITION_UNITS, GUARD_MAX_INVENTORY_NOTIONAL
+        # Only keep runtime safety toggles that might need quick changes
+        (("guard", "crossed_book_protection"), "GUARD_CROSSED_BOOK_PROTECTION", "bool"),  # Keep: safety toggle
+        (("guard", "kill_on_crossed_book"), "GUARD_KILL_ON_CROSSED_BOOK", "bool"),  # Keep: kill-switch toggle
+        (("guard", "kill_on_inventory_breach"), "GUARD_KILL_ON_INVENTORY_BREACH", "bool"),  # Keep: kill-switch toggle
+        (("guard", "backoff_seconds_on_block"), "GUARD_BACKOFF_SECONDS_ON_BLOCK", "int"),  # Keep: might vary by deployment
         (("replay", "enabled"), "REPLAY_ENABLED", "bool"),
         (("chaos", "enabled"), "CHAOS_ENABLED", "bool"),
         (("optimizer", "enabled"), "OPTIMIZER_ENABLED", "bool"),
