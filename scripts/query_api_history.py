@@ -55,14 +55,55 @@ async def query_fills_via_api():
     if not api_key:
         print("⚠️  No API key found. Trying unauthenticated endpoints...")
 
-    # Try REST API directly with aiohttp
+    # Try REST API directly (use httpx which is in requirements.txt)
     try:
-        import aiohttp
+        import httpx
     except ImportError:
-        print("ERROR: aiohttp not installed")
-        return None
-
-    async with aiohttp.ClientSession() as session:
+        try:
+            import aiohttp
+            use_httpx = False
+        except ImportError:
+            print("ERROR: Neither httpx nor aiohttp installed")
+            return None
+    else:
+        use_httpx = True
+    
+    if use_httpx:
+        # Use httpx (synchronous but simpler)
+        client = httpx.Client(timeout=30.0, follow_redirects=True)
+        try:
+            for endpoint in endpoints:
+                try:
+                    url = f"{base_url}{endpoint}"
+                    print(f"Trying: {url}")
+                    
+                    resp = client.get(url, headers=headers)
+                    print(f"  Status: {resp.status_code}")
+                    
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        count = len(data) if isinstance(data, list) else 1
+                        print(f"  ✅ Success! Got {count} items")
+                        
+                        # Check if it's the right format
+                        if isinstance(data, list) and len(data) > 0:
+                            first = data[0]
+                            if any(key in first for key in ["fill", "trade", "order", "timestamp", "price", "size"]):
+                                print(f"  ✅ Looks like fill/order data!")
+                                return data
+                    elif resp.status_code == 401:
+                        print(f"  ⚠️  Unauthorized - might need API key")
+                    elif resp.status_code == 404:
+                        print(f"  ❌ Not found")
+                    else:
+                        print(f"  ❌ Error: {resp.text[:200]}")
+                except Exception as e:
+                    print(f"  ❌ Failed: {e}")
+        finally:
+            client.close()
+    else:
+        # Use aiohttp (async)
+        async with aiohttp.ClientSession() as session:
         # Common endpoints for order/fill history
         endpoints = [
             # Standard REST API patterns
