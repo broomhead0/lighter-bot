@@ -12,7 +12,20 @@ from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.config_loader import load_config
+try:
+    import yaml
+    from pathlib import Path as PathLib
+    
+    def load_config():
+        """Load config from YAML file."""
+        config_path = PathLib("config.yaml")
+        if not config_path.exists():
+            config_path = PathLib(__file__).parent.parent / "config.yaml"
+        with config_path.open() as f:
+            return yaml.safe_load(f)
+except ImportError:
+    def load_config():
+        return {}
 
 
 async def query_fills_via_api():
