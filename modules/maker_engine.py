@@ -294,16 +294,31 @@ class MakerEngine:
                 # Apply inventory size multiplier (after PnL guard but before final quantization)
                 quote_size *= inventory_size_multiplier
                 
-                # CRITICAL: Ensure size never goes below exchange minimum after ALL multipliers
+                # CRITICAL: Ensure size meets BOTH exchange minimum size AND notional after ALL multipliers
                 # This can happen when: base_size (0.064) * pnl_guard (0.85) * inventory (0.75) = 0.0408
                 original_size = quote_size
+                
+                # First ensure minimum size
                 if quote_size < self.exchange_min_size:
                     quote_size = self.exchange_min_size
-                    LOG.debug(
-                        "[maker] size quantization: adjusted from %.6f to %.6f (exchange minimum)",
-                        original_size,
-                        quote_size
-                    )
+                
+                # Then ensure minimum notional (price * size must be >= min_notional)
+                if mid and self.exchange_min_notional > 0:
+                    min_size_for_notional = self.exchange_min_notional / mid
+                    if quote_size < min_size_for_notional:
+                        # Round up to nearest lot step to meet notional
+                        scale = max(1, self.size_scale)
+                        raw_units = min_size_for_notional
+                        quantized = math.ceil(raw_units * scale) / float(scale)
+                        quote_size = max(quote_size, quantized)
+                        LOG.debug(
+                            "[maker] size quantization: adjusted from %.6f to %.6f (notional: %.2f @ %.2f = $%.2f)",
+                            original_size,
+                            quote_size,
+                            quote_size,
+                            mid,
+                            quote_size * mid
+                        )
 
                 # Check cancel discipline (throttle if exceeded)
                 self._check_cancel_discipline()
