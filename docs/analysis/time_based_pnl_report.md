@@ -63,5 +63,20 @@ Based on the analysis above:
 3. **Day-of-week patterns** - Adjust strategy based on day-specific performance
 4. **Market hours** - Compare NY hours vs overnight vs weekend performance
 
-**Note**: This analysis uses `realized_quote` which is cash flow, not true FIFO realized PnL.
-For true PnL, monitor UI PnL or telemetry's `maker_fifo_realized_quote`.
+**⚠️ CRITICAL WARNING**: This analysis uses `realized_quote` which is **CASH FLOW**, not true PnL!
+
+**What it measures**: Cash flow from fills (quote_delta - fees)  
+**What it DOES NOT measure**: Unrealized losses on inventory, true FIFO realized PnL
+
+**Example**: 
+- We buy 0.1 SOL at $100 = +$10 cash flow (shows in CSV)
+- Price drops to $90, we still hold it
+- CSV shows: +$10 (cash flow)
+- True PnL: -$1 (unrealized loss not captured in CSV)
+
+**This is why**:
+- CSV sum: +$9.27 (cash flow from this session)
+- UI PnL: -$15+ (true PnL including unrealized losses)
+- We're losing money on inventory accumulation!
+
+**For true PnL**, monitor UI PnL or telemetry's `maker_fifo_realized_quote`.
