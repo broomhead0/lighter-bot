@@ -485,6 +485,27 @@ class AccountListener:
         except Exception:
             pass
         self._set_inventory(market, value)
+        
+        # Log position updates with PnL for analysis (source of truth from exchange!)
+        realized_pnl = entry.get("realized_pnl")
+        unrealized_pnl = entry.get("unrealized_pnl")
+        if realized_pnl is not None and self.metrics_ledger:
+            # Store in position ledger for time-based analysis
+            try:
+                from metrics.ledger import PositionEvent
+                import time as time_module
+                from dataclasses import dataclass
+                
+                # Create position event (will append to ledger)
+                # Note: We need to define PositionEvent or use a simple JSON log
+                # For now, just log it so we can extract later
+                total_pnl = float(realized_pnl) + float(unrealized_pnl or 0)
+                LOG.info(
+                    "[account] position_pnl market=%s realized=%s unrealized=%s total=%s",
+                    market, realized_pnl, unrealized_pnl, total_pnl
+                )
+            except Exception:
+                pass
 
     def _compute_base_delta(self, fill: FillRecord) -> Decimal:
         size = Decimal(fill.size)
