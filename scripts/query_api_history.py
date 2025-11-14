@@ -61,11 +61,14 @@ async def query_fills_via_api():
         f"/api/v1/account/{account_index}/trades",
         f"/api/v1/orders?account={account_index}",
         f"/api/v1/fills?account={account_index}",
-        # Trades endpoint (requires sort_by and limit)
-        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=10000",
-        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=50000",
-        f"/api/v1/trades?account={account_index}&sort_by=block_height&limit=10000",
-        f"/api/v1/trades?account={account_index}&sort_by=trade_id&limit=10000",
+        # Trades endpoint (requires sort_by and limit - try various limits)
+        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=1000",
+        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=500",
+        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=100",
+        f"/api/v1/trades?account={account_index}&sort_by=block_height&limit=1000",
+        f"/api/v1/trades?account={account_index}&sort_by=trade_id&limit=1000",
+        # Try with pagination (offset/cursor)
+        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=1000&offset=0",
         # Alternative patterns
         f"/api/account/{account_index}/orders",
         f"/api/account/{account_index}/fills",
@@ -113,7 +116,20 @@ async def query_fills_via_api():
                             first = data[0]
                             if any(key in first for key in ["fill", "trade", "order", "timestamp", "price", "size"]):
                                 print(f"  ✅ Looks like fill/order data!")
+                                # If pagination is possible, try to get more
+                                if len(data) >= 1000:  # Might be more pages
+                                    print(f"  ⚠️  Got {len(data)} items - might need pagination for full history")
                                 return data
+                        elif isinstance(data, dict):
+                            # Might be paginated or wrapped
+                            if "data" in data:
+                                items = data["data"]
+                                if isinstance(items, list) and len(items) > 0:
+                                    print(f"  ✅ Got wrapped data with {len(items)} items")
+                                    # Check for pagination info
+                                    if "has_more" in data or "next_offset" in data:
+                                        print(f"  ⚠️  Pagination available - may need to fetch more pages")
+                                    return items
                         elif isinstance(data, dict):
                             # Might be paginated or wrapped
                             if "data" in data:
