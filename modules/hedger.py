@@ -181,7 +181,7 @@ class Hedger:
                                 pass
                         LOG.debug("[hedger] loop heartbeat: enabled=%s inv=%s", self.enabled, inv)
                         last_heartbeat = now
-                    
+
                     await self._maybe_hedge()
                 except Exception as exc:
                     LOG.exception("[hedger] loop error: %s", exc)
@@ -214,7 +214,7 @@ class Hedger:
                     LOG.debug("[hedger] _maybe_hedge called: inv_raw=%s", inventory_raw)
             except Exception:
                 pass
-        
+
         inventory = inventory_raw
         if inventory is None:
             LOG.warning("[hedger] inventory is None for %s (StateStore may not be tracking)", self.market)
@@ -228,7 +228,7 @@ class Hedger:
 
         abs_inv = abs(inventory)
         now = time.time()
-        
+
         # Log inventory check for debugging (always log when significantly over threshold)
         if abs_inv > self.trigger_units * Decimal("1.5"):  # Only log when significantly over trigger
             LOG.info(
@@ -239,9 +239,9 @@ class Hedger:
                 float(abs_inv - self.trigger_units),
             )
         elif abs_inv > 0:
-            LOG.debug("[hedger] inventory below trigger: inv=%.4f trigger=%.4f", 
+            LOG.debug("[hedger] inventory below trigger: inv=%.4f trigger=%.4f",
                      float(abs_inv), float(self.trigger_units))
-        
+
         if abs_inv <= self.trigger_units:
             self._over_trigger_since = None
             if self.telemetry:
@@ -289,12 +289,18 @@ class Hedger:
             except Exception:
                 pnl_guard_active = False
 
+        # Notional check: Only block if notional is BELOW threshold AND inventory is ALSO below units threshold
+        # This allows hedging when either units OR notional exceeds threshold
         if self.trigger_notional is not None:
             notional = abs_inv * Decimal(str(mid))
-            if notional <= self.trigger_notional:
-                LOG.debug("[hedger] notional check failed: %.2f <= %.2f", float(notional), float(self.trigger_notional))
+            if notional <= self.trigger_notional and abs_inv <= self.trigger_units:
+                # Both checks failed: inventory below units threshold AND notional below notional threshold
+                LOG.debug("[hedger] both checks failed: notional=%.2f <= %.2f AND inv=%.4f <= %.4f",
+                         float(notional), float(self.trigger_notional), float(abs_inv), float(self.trigger_units))
                 return
-            LOG.debug("[hedger] notional check passed: %.2f > %.2f", float(notional), float(self.trigger_notional))
+            # At least one check passed
+            LOG.debug("[hedger] check passed: notional=%.2f > %.2f OR inv=%.4f > %.4f",
+                     float(notional), float(self.trigger_notional), float(abs_inv), float(self.trigger_units))
 
         excess_units = abs_inv - self.target_units
         if excess_units <= Decimal("0"):
@@ -312,9 +318,9 @@ class Hedger:
             if clip_limit > abs_inv:
                 clip_limit = abs_inv
         hedge_units = min(excess_units, clip_limit)
-        LOG.debug("[hedger] initial hedge_units: %.4f (excess=%.4f, clip_limit=%.4f)", 
+        LOG.debug("[hedger] initial hedge_units: %.4f (excess=%.4f, clip_limit=%.4f)",
                   float(hedge_units), float(excess_units), float(clip_limit))
-        
+
         if pnl_guard_active and self.guard_clip_multiplier > 0:
             try:
                 guard_clip = self.max_clip_units * Decimal(str(self.guard_clip_multiplier))
@@ -369,7 +375,7 @@ class Hedger:
 
         if time.time() < self._next_allowed_ts:
             remaining = self._next_allowed_ts - time.time()
-            LOG.info("[hedger] cooling down (%.2fs remaining, inv=%.4f, hedge_units=%.4f)", 
+            LOG.info("[hedger] cooling down (%.2fs remaining, inv=%.4f, hedge_units=%.4f)",
                      remaining, float(abs_inv), float(hedge_units))
             return
 
