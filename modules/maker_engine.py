@@ -290,18 +290,18 @@ class MakerEngine:
 
                 # Compute base quote size (includes PnL guard multiplier inside)
                 quote_size = self._compute_quote_size(mid, volatility_bps)
-                
+
                 # Apply inventory size multiplier (after PnL guard but before final quantization)
                 quote_size *= inventory_size_multiplier
-                
+
                 # CRITICAL: Ensure size meets BOTH exchange minimum size AND notional after ALL multipliers
                 # This can happen when: base_size (0.064) * pnl_guard (0.85) * inventory (0.75) = 0.0408
                 original_size = quote_size
-                
+
                 # First ensure minimum size
                 if quote_size < self.exchange_min_size:
                     quote_size = self.exchange_min_size
-                
+
                 # Then ensure minimum notional (price * size must be >= min_notional)
                 if mid and self.exchange_min_notional > 0:
                     min_size_for_notional = self.exchange_min_notional / mid

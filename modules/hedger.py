@@ -343,11 +343,11 @@ class Hedger:
         # CRITICAL: Ensure clip size meets BOTH exchange minimum size AND notional after ALL multipliers
         # PnL guard can reduce clips to 0.0105 SOL, which at $143 = $1.50 < $10.5 minimum notional
         original_hedge_units = hedge_units
-        
+
         # First ensure minimum size
         if hedge_units < Decimal(str(self.exchange_min_size)):
             hedge_units = Decimal(str(self.exchange_min_size))
-        
+
         # Then ensure minimum notional (price * size must be >= min_notional)
         if mid and self.exchange_min_notional > 0:
             min_size_for_notional = Decimal(str(self.exchange_min_notional)) / Decimal(str(mid))
@@ -366,12 +366,12 @@ class Hedger:
                     mid,
                     float(hedge_units) * mid
                 )
-        
+
         # Cap at max_clip_units to prevent oversized hedges
         if hedge_units > self.max_clip_units:
             hedge_units = self.max_clip_units
             LOG.debug("[hedger] clip capped at max_clip_units: %.4f", float(hedge_units))
-        
+
         # Also cap at current inventory (can't hedge more than we have)
         if hedge_units > abs_inv:
             hedge_units = abs_inv

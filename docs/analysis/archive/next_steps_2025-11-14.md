@@ -47,7 +47,7 @@ maker:
 ### 2. **More Aggressive PnL Guard (HIGH PRIORITY)**
 **Problem**: PnL guard only triggers after losses accumulate (-$0.50 floor, 2 consecutive checks)
 
-**Solution**: 
+**Solution**:
 - Lower realized_floor from -$0.50 to -$0.20 (trigger earlier)
 - Reduce trigger_consecutive from 2 to 1 (trigger immediately)
 - Increase widen_bps from 4.0 to 6.0 (wider spreads when engaged)

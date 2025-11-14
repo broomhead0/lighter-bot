@@ -1,63 +1,81 @@
-# Docker Deployment Guide
+# Docker Guide
+
+**Complete guide for running the lighter bot with Docker.**
+
+---
 
 ## Prerequisites
 
-- Docker Desktop (macOS/Windows) or Docker Engine (Linux)
-- Docker Compose (included in Docker Desktop, or install separately)
+### Install Docker
 
-See [DOCKER_SETUP.md](DOCKER_SETUP.md) if you need to install Docker.
+**macOS (Docker Desktop - Recommended):**
+```bash
+# Download from:
+# https://www.docker.com/products/docker-desktop
+
+# Or via Homebrew:
+brew install --cask docker
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER  # Log out and back in
+```
+
+**Verify Installation:**
+```bash
+docker --version
+docker compose version  # or docker-compose --version
+```
+
+### Start Docker Desktop
+
+**macOS:**
+```bash
+open -a Docker
+# Wait for whale icon in menu bar
+```
+
+**Verify Docker is Running:**
+```bash
+docker ps  # Should not error
+```
+
+---
 
 ## Quick Start
 
-### Build and Run
+### Using Docker Compose (Recommended)
 
 ```bash
-# Build the image
+# Build and start
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
+
+**Note:** If `docker compose` doesn't work, try `docker-compose` (with hyphen).
+
+### Using Docker Run
+
+```bash
+# Build image
 docker build -t lighter-bot .
 
-# Run the container
+# Run container
 docker run -d \
   --name lighter-bot \
   -v $(pwd)/config.yaml:/app/config.yaml:ro \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/data:/app/data \
   -p 9100:9100 \
-  -e WS_URL=wss://mainnet.zklighter.elliot.ai/stream/market_stats:all \
-  lighter-bot
-```
-
-### Using Docker Compose
-
-**If docker-compose is installed:**
-```bash
-# Start the service
-docker compose up -d
-# OR (if using standalone)
-docker-compose up -d
-
-# View logs
-docker compose logs -f
-# OR
-docker-compose logs -f
-
-# Stop the service
-docker compose down
-# OR
-docker-compose down
-```
-
-**If docker-compose is NOT available:**
-```bash
-# Use the helper script
-./run-docker.sh
-
-# Or manually:
-docker build -t lighter-bot .
-docker run -d --name lighter-bot --rm \
-  -v $(pwd)/config.yaml:/app/config.yaml:ro \
-  -v $(pwd)/logs:/app/logs \
-  -v $(pwd)/data:/app/data \
-  -p 9100:9100 \
+  -e WS_URL=wss://mainnet.zklighter.elliot.ai/stream \
   lighter-bot
 
 # View logs
@@ -65,12 +83,10 @@ docker logs -f lighter-bot
 
 # Stop
 docker stop lighter-bot
+docker rm lighter-bot
 ```
 
-**Install docker-compose (macOS):**
-```bash
-brew install docker-compose
-```
+---
 
 ## Configuration
 
@@ -89,6 +105,8 @@ The compose file mounts:
 - `./config.yaml` - Read-only config file
 - `./logs` - Logs directory (persisted)
 - `./data` - Data directory (persisted)
+
+---
 
 ## Health Checks
 
@@ -124,6 +142,8 @@ Status codes:
 - `200` - Healthy (recent heartbeats within 60s)
 - `503` - Unhealthy (no recent heartbeats)
 
+---
+
 ## Telemetry
 
 ### Enable Telemetry
@@ -141,6 +161,8 @@ telemetry:
 # Prometheus-style metrics
 curl http://localhost:9100/metrics
 ```
+
+---
 
 ## Development
 
@@ -176,6 +198,8 @@ docker compose logs -f
 docker exec -it lighter-bot bash
 ```
 
+---
+
 ## Troubleshooting
 
 ### Container Won't Start
@@ -195,19 +219,38 @@ docker exec -it lighter-bot bash
 
 If volumes have permission issues:
 ```bash
-# Fix log directory permissions
 chmod -R 777 logs
 chmod -R 777 data
 ```
 
 ### Port Conflicts
 
-If port 9100 is in use:
+If port 9100 is in use, change port mapping in `docker-compose.yml`:
 ```yaml
-# In docker-compose.yml, change:
 ports:
   - "9101:9100"  # Map host 9101 to container 9100
 ```
+
+### "Cannot connect to Docker daemon"
+
+- Docker Desktop isn't running
+- Start it: `open -a Docker` (macOS)
+- Wait for it to fully start
+
+### "docker-compose: command not found"
+
+**Use new syntax (no hyphen):**
+```bash
+docker compose up -d
+```
+
+**Or install standalone:**
+```bash
+brew install docker-compose  # macOS
+sudo apt-get install docker-compose  # Linux
+```
+
+---
 
 ## Production Deployment
 
@@ -240,11 +283,6 @@ secrets:
     file: ./secrets/discord_webhook.txt
 ```
 
-## Next Steps
+---
 
-- Set up monitoring (Prometheus + Grafana)
-- Configure log aggregation
-- Set up alerts for health check failures
-- Implement graceful shutdown handling
-- Add resource limits (CPU/memory)
-
+**Your bot is containerized and ready to deploy!** 🐳

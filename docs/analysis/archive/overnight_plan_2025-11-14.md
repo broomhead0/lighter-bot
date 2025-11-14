@@ -3,7 +3,7 @@
 ## Current Situation
 - **UI PnL**: -$13 since 11/10
 - **Root cause**: Inventory losses (-$22.27) eroding cash flow (+$9.27)
-- **Recent fixes**: 
+- **Recent fixes**:
   - ✅ Hedger notional check bug fixed (OR logic) - DEPLOYED
   - ✅ Asymmetric quoting - DEPLOYED
   - ✅ Notional fix for maker orders - DEPLOYED
@@ -11,13 +11,13 @@
 ## Overnight Strategy
 
 ### Option 1: Conservative - Widen Spreads Slightly (RECOMMENDED)
-**Rationale**: 
+**Rationale**:
 - Overnight typically has lower liquidity (from previous findings)
 - Slightly wider spreads = more edge per fill, fewer fills
 - Reduces risk of accumulating inventory overnight
 - Small change, low risk
 
-**Change**: 
+**Change**:
 - `maker.spread_bps`: 12.0 → 13.0 bps
 - **Impact**: ~8% wider spreads, slightly less volume, more edge per fill
 
@@ -123,4 +123,5 @@ Check UI PnL
 - Check in morning (use commands above)
 - Evaluate if performance improved
 - Decide next steps based on overnight results
+
 

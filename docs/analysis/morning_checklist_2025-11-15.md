@@ -7,7 +7,7 @@
 - **Target**: Stopped bleeding or only -$1 to -$2 additional
 - **Red flag**: Lost > $3 overnight
 
-**Action**: 
+**Action**:
 - Check UI for total PnL
 - Compare to -$13 baseline from yesterday
 - Note overnight change
@@ -108,4 +108,5 @@ railway logs --service lighter-bot --tail 5000 | grep -E "(MakerEngine started|I
 # Get current state
 railway ssh --service lighter-bot -- "curl -s http://localhost:9100/metrics 2>/dev/null | grep -E '(maker_|hedger_|metrics_)(fifo_realized|inventory|regime_state)'" | head -15
 ```
+
 

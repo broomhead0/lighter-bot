@@ -32,13 +32,13 @@
 ## 2025-11-13 – Configuration Strategy Fix (IMPORTANT)
 
 - **Problem**: Railway environment variables were overriding `config.yaml` values, causing confusion when changes to config.yaml didn't take effect. AI kept forgetting about Railway variables when context reloaded.
-- **Solution**: 
+- **Solution**:
   - Removed env override code for ALL trading parameters (maker/hedger/guard config)
   - All trading parameters now come ONLY from `config.yaml` (version controlled)
   - Only runtime toggles (dry_run, enabled) and secrets still use env vars
   - Comprehensive audit performed and documented
 - **Impact**: Single source of truth (config.yaml), no surprises, easier to track changes
-- **References**: 
+- **References**:
   - `docs/CONFIG_STRATEGY.md` - Configuration strategy overview
   - `docs/CONFIG_AUDIT.md` - Comprehensive audit with all gotchas and recommendations
 - **Fixed**:

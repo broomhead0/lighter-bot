@@ -170,7 +170,7 @@ Large (0.075, -0.075):  22 times (3%)
 
 **Status**: 🟡 **Mixed - Fix Working But Patterns Persist**
 
-**Good**: Hedger fix is working, orders submitting successfully, inventory mostly flat  
-**Concern**: Still seeing large builds to 0.075, PnL guard engaging frequently  
+**Good**: Hedger fix is working, orders submitting successfully, inventory mostly flat
+**Concern**: Still seeing large builds to 0.075, PnL guard engaging frequently
 **Action**: Verify latest config deployed, monitor for 2-4 more hours, consider further tightening if pattern persists
 

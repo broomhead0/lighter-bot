@@ -21,11 +21,6 @@ except Exception:  # noqa
     FundingOptimizer = None  # type: ignore
 
 try:
-    from modules.pair_selector import PairSelector
-except Exception:  # noqa
-    PairSelector = None  # type: ignore
-
-try:
     from modules.maker_engine import MakerEngine
 except Exception:  # noqa
     MakerEngine = None  # type: ignore

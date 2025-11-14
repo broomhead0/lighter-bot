@@ -1,12 +1,15 @@
-# Monitoring Guide - How to Check for Issues
+# Monitoring Guide
 
-## 🎯 Quick Health Checks
+**Complete guide for monitoring your lighter bot in production.**
+
+---
+
+## Quick Health Checks
 
 ### 1. Health Endpoint (Easiest)
 
 ```bash
-# Check if bot is alive
-curl https://lighter-bot-production.up.railway.app/health
+curl https://your-app.railway.app/health
 
 # Should return:
 # {"status": "healthy", "ws_age_seconds": <60, "quote_age_seconds": <60}
@@ -21,7 +24,7 @@ curl https://lighter-bot-production.up.railway.app/health
 ### 2. Metrics Endpoint
 
 ```bash
-curl https://lighter-bot-production.up.railway.app/metrics | grep -E "(uptime|age|error)"
+curl https://your-app.railway.app/metrics | grep -E "(uptime|age|error)"
 ```
 
 **Check for:**
@@ -32,81 +35,33 @@ curl https://lighter-bot-production.up.railway.app/metrics | grep -E "(uptime|ag
 
 ---
 
-## 🔍 Railway Log Monitoring
+## Automated Monitoring Setup
 
-### Quick Checks in Railway Dashboard
-
-1. **Go to Railway** → Your service → "Deployments" → Latest → "View Logs"
-
-2. **Search for errors:**
-   - Look for: `ERROR`, `WARNING`, `Exception`, `Traceback`
-   - Red text = problem
-
-3. **Check for key patterns:**
-
-**✅ Good signs:**
-```
-[INFO] [maker] [market:market:1] mid=... | bid=... | ask=...
-[INFO] [listener] [router] mid updated market:1 -> ...
-```
-
-**❌ Bad signs:**
-```
-ERROR
-WARNING
-Exception
-Traceback
-Connection refused
-Timeout
-Failed to connect
-```
-
-### Filter Logs by Component
-
-**Maker issues:**
-- Search: `[maker]`
-- Look for: "quote blocked", "throttled", "failed"
-
-**WebSocket issues:**
-- Search: `[listener]` or `[router]`
-- Look for: "disconnected", "reconnect", "failed"
-
-**Guard issues:**
-- Search: `[guard]`
-- Look for: "Kill-switch", "breach", "blocked"
-
----
-
-## 📊 Automated Monitoring Setup
-
-### Option 1: UptimeRobot (Free, Recommended)
+### Option 1: UptimeRobot (Free - Recommended)
 
 1. **Sign up**: https://uptimerobot.com
 2. **Add Monitor**:
    - Type: HTTP(s)
-   - URL: `https://lighter-bot-production.up.railway.app/health`
+   - URL: `https://your-app.railway.app/health`
    - Interval: 5 minutes
    - Alert contacts: Your email
 3. **Get alerts** when bot goes down
 
 ### Option 2: Railway Built-in Monitoring
 
-1. **In Railway dashboard** → Your service
-2. **Go to "Metrics" tab**
-3. **Watch**:
+1. Go to Railway dashboard → Your service
+2. "Metrics" tab shows:
    - CPU usage
    - Memory usage
    - Request rate
 
 ### Option 3: Custom Health Check Script
 
-Create a simple script to check health:
-
 ```bash
 #!/bin/bash
 # health_check.sh
 
-URL="https://lighter-bot-production.up.railway.app/health"
+URL="https://your-app.railway.app/health"
 RESPONSE=$(curl -s $URL)
 
 if echo "$RESPONSE" | grep -q '"status":"healthy"'; then
@@ -119,15 +74,52 @@ else
 fi
 ```
 
-Run it periodically:
+Run periodically:
 ```bash
-# Check every 5 minutes
-watch -n 300 ./health_check.sh
+watch -n 300 ./health_check.sh  # Check every 5 minutes
 ```
 
 ---
 
-## 🚨 Key Issues to Watch For
+## Log Monitoring
+
+### Railway Dashboard
+
+1. Go to Railway → Your service → "Deployments" → Latest → "View Logs"
+2. Search for errors: `ERROR`, `WARNING`, `Exception`, `Traceback`
+3. Filter by component:
+   - `[maker]` - Maker engine issues
+   - `[listener]` or `[router]` - WebSocket issues
+   - `[guard]` - Guard blocking issues
+
+### What's Normal
+
+✅ **Good signs:**
+```
+[INFO] [maker] [market:market:1] mid=... | bid=... | ask=...
+[INFO] [listener] [router] mid updated market:1 -> ...
+```
+
+⚠️ **Occasional warnings (OK):**
+- WebSocket reconnects (network hiccups)
+- Occasional guard blocks (safety working)
+- Cancel throttling (rate limit protection)
+
+❌ **Bad signs:**
+```
+ERROR
+WARNING (frequent)
+Exception
+Traceback
+Connection refused
+Timeout
+Failed to connect
+Kill-switch
+```
+
+---
+
+## Key Issues to Watch For
 
 ### 1. WebSocket Disconnection
 
@@ -192,11 +184,11 @@ watch -n 300 ./health_check.sh
 
 ---
 
-## 📈 Regular Monitoring Routine
+## Regular Monitoring Routine
 
 ### Daily Checks (2 minutes)
 
-1. **Health endpoint**: `curl https://lighter-bot-production.up.railway.app/health`
+1. **Health endpoint**: `curl https://your-app.railway.app/health`
 2. **Quick log scan**: Railway → Logs → Look for red text
 3. **UptimeRobot**: Check if any alerts
 
@@ -214,31 +206,31 @@ watch -n 300 ./health_check.sh
 
 ---
 
-## 🔧 Quick Diagnostic Commands
+## Quick Diagnostic Commands
 
 ### Check if bot is responding:
 ```bash
-curl -s https://lighter-bot-production.up.railway.app/health | jq .
+curl -s https://your-app.railway.app/health | jq .
 ```
 
 ### Check uptime:
 ```bash
-curl -s https://lighter-bot-production.up.railway.app/metrics | grep uptime_seconds
+curl -s https://your-app.railway.app/metrics | grep uptime_seconds
 ```
 
 ### Check WebSocket age:
 ```bash
-curl -s https://lighter-bot-production.up.railway.app/health | jq .ws_age_seconds
+curl -s https://your-app.railway.app/health | jq .ws_age_seconds
 ```
 
 ### Check quote age:
 ```bash
-curl -s https://lighter-bot-production.up.railway.app/health | jq .quote_age_seconds
+curl -s https://your-app.railway.app/health | jq .quote_age_seconds
 ```
 
 ---
 
-## 🎯 Red Flags Summary
+## Red Flags Summary
 
 **Immediate action needed:**
 - ❌ Health endpoint returns 503
@@ -261,17 +253,7 @@ curl -s https://lighter-bot-production.up.railway.app/health | jq .quote_age_sec
 
 ---
 
-## 💡 Pro Tips
-
-1. **Set up UptimeRobot** - Free and catches issues automatically
-2. **Check health endpoint** - Quickest way to verify bot is alive
-3. **Filter logs** - Use Railway's search to find specific issues
-4. **Watch for patterns** - One error is OK, repeated errors = problem
-5. **Trust the guard** - If it's blocking, it's protecting you!
-
----
-
-## 🆘 When to Worry
+## When to Worry
 
 **Don't worry about:**
 - Occasional guard blocks (safety feature)
@@ -288,5 +270,5 @@ curl -s https://lighter-bot-production.up.railway.app/health | jq .quote_age_sec
 
 ---
 
-Your bot is designed to be resilient - most issues self-resolve. The health endpoint is your best friend for quick checks!
+**Your bot is designed to be resilient - most issues self-resolve. The health endpoint is your best friend for quick checks!** 🎯
 

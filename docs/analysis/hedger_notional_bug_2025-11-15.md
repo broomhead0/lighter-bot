@@ -2,7 +2,7 @@
 
 ## Problem Discovery
 
-**User reported**: -$2 overnight (from -$13 baseline) = -$15 total  
+**User reported**: -$2 overnight (from -$13 baseline) = -$15 total
 **Investigation revealed**: Inventory stuck at 0.093 SOL despite constant hedging
 
 ### Root Cause
@@ -140,4 +140,5 @@ if price * hedge_units < exchange_min_notional ($10.5):
 2. **Guard dampening can expose bugs** - smaller sizes may fall below minimums
 3. **Silent failures are dangerous** - need better error logging
 4. **Test all paths** - maker fixed, but hedger had same issue
+
 

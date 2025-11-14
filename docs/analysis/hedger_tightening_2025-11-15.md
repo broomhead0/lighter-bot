@@ -11,7 +11,7 @@
 - Then builds again
 - **Cycle repeats** → Multiple hedging costs
 
-**Impact**: 
+**Impact**:
 - Each hedge cycle costs ~$4-5 (0.030 SOL taker cross at ~$138)
 - Frequent cycles erode maker edge
 - Net result: -$0.25/hour loss rate
@@ -29,7 +29,7 @@ hedger:
 
 ### Rationale
 
-1. **Earlier trigger (0.008)**: 
+1. **Earlier trigger (0.008)**:
    - Hedger activates when inventory = 0.008 SOL (~$1.10)
    - Prevents buildup to 0.075 SOL
    - Smaller clips = cheaper hedges
@@ -141,4 +141,5 @@ hedger:
 - Previous: 0.010 → 0.015 was a bigger jump
 - This: 0.010 → 0.008 is smaller refinement
 - **Rationale**: Fine-tuning based on specific observation (0.075 SOL builds)
+
 
