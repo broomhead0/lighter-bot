@@ -141,7 +141,6 @@ def setup_logging():
         "listener",
         "maker",
         "optimizer",
-        "selector",
         "compat",
         "mean_reversion",
     ):
@@ -892,27 +891,7 @@ async def main():
                 ],
             )
 
-    selector = None
-    if PairSelector:
-        selector = _try_construct(
-            PairSelector,
-            [
-                (
-                    (),
-                    {
-                        "config": cfg,
-                        "state": state,
-                        "alert_manager": alert_mgr,
-                        "telemetry": telemetry,
-                    },
-                ),
-                ((), {"config": cfg, "state": state}),
-                ((cfg, state), {}),
-                ((state, cfg), {}),
-                ((state,), {}),
-                ((), {}),
-            ],
-        )
+    # PairSelector removed - module not used
 
     tasks: List[asyncio.Task] = []
 
@@ -1075,8 +1054,7 @@ async def main():
         tasks.append(asyncio.create_task(run_component("listener", listener)))
     if optimizer:
         tasks.append(asyncio.create_task(run_component("optimizer", optimizer)))
-    if selector:
-        tasks.append(asyncio.create_task(run_component("selector", selector)))
+    # PairSelector removed - module not used
     if maker:
         tasks.append(asyncio.create_task(run_component("maker", maker)))
     if hedger:
