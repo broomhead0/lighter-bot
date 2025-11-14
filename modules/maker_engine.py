@@ -254,10 +254,42 @@ class MakerEngine:
 
                 trend_bias, extra_spread = self._update_trend_state(mid)
 
+                # Phase 2: Get inventory for spread widening and size reduction
+                inventory = Decimal("0")
+                inventory_abs = Decimal("0")
+                if self.state and hasattr(self.state, "get_inventory"):
+                    try:
+                        inv_raw = self.state.get_inventory(self.market)
+                        if inv_raw is not None:
+                            inventory = Decimal(str(inv_raw))
+                            inventory_abs = abs(inventory)
+                    except Exception:
+                        pass
+
+                # Phase 2: Inventory-based spread widening
+                # Wider spreads as inventory builds to make fills less attractive
+                inventory_spread_bps = 0.0
+                if inventory_abs > Decimal("0.03"):
+                    inventory_spread_bps = 6.0
+                elif inventory_abs > Decimal("0.02"):
+                    inventory_spread_bps = 4.0
+                elif inventory_abs > Decimal("0.01"):
+                    inventory_spread_bps = 2.0
+
                 bid, ask, spread = self._compute_quotes(
-                    mid, volatility_bps, extra_spread_bps=extra_spread
+                    mid, volatility_bps, extra_spread_bps=extra_spread + inventory_spread_bps
                 )
+
+                # Phase 2: Inventory-based size reduction
+                # Reduce size when inventory exists to prevent adding to position
+                inventory_size_multiplier = 1.0
+                if inventory_abs > Decimal("0.02"):
+                    inventory_size_multiplier = 0.50
+                elif inventory_abs > Decimal("0.01"):
+                    inventory_size_multiplier = 0.75
+
                 quote_size = self._compute_quote_size(mid, volatility_bps)
+                quote_size *= inventory_size_multiplier
 
                 # Check cancel discipline (throttle if exceeded)
                 self._check_cancel_discipline()
@@ -320,8 +352,34 @@ class MakerEngine:
 
                 place_bid = trend_bias in ("both", "bid")
                 place_ask = trend_bias in ("both", "ask")
+                
+                # Phase 2: Asymmetric quoting based on inventory
+                # If inventory exists, stop quoting the side that adds to position
+                # Work WITH hedger instead of against it
+                asymmetric_threshold = Decimal("0.01")  # 0.01 SOL threshold
+                
+                if inventory_abs > asymmetric_threshold:
+                    if inventory > 0:  # Long inventory
+                        # Stop placing bids (don't add to long position)
+                        # Keep asking to flatten inventory
+                        if place_bid:
+                            LOG.info(
+                                "[maker] asymmetric quoting: disabling bids (long inventory %.4f)",
+                                float(inventory)
+                            )
+                        place_bid = False
+                    else:  # Short inventory
+                        # Stop placing asks (don't add to short position)
+                        # Keep bidding to flatten inventory
+                        if place_ask:
+                            LOG.info(
+                                "[maker] asymmetric quoting: disabling asks (short inventory %.4f)",
+                                float(inventory)
+                            )
+                        place_ask = False
+                
                 if not place_bid and not place_ask:
-                    LOG.debug("[maker] trend filter skipping both sides")
+                    LOG.debug("[maker] trend/inventory filter skipping both sides")
                     await self._cancel_all_orders()
                     await asyncio.sleep(self.refresh_seconds)
                     continue
