@@ -62,13 +62,12 @@ async def query_fills_via_api():
         f"/api/v1/orders?account={account_index}",
         f"/api/v1/fills?account={account_index}",
         # Trades endpoint (requires sort_by and limit - try various limits)
-        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=1000",
-        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=500",
+        # Note: limit=100 gave different error, might need smaller values
+        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=50",
         f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=100",
-        f"/api/v1/trades?account={account_index}&sort_by=block_height&limit=1000",
-        f"/api/v1/trades?account={account_index}&sort_by=trade_id&limit=1000",
-        # Try with pagination (offset/cursor)
-        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=1000&offset=0",
+        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=200",
+        f"/api/v1/trades?account={account_index}&sort_by=block_height&limit=100",
+        f"/api/v1/trades?account={account_index}&sort_by=trade_id&limit=100",
         # Alternative patterns
         f"/api/account/{account_index}/orders",
         f"/api/account/{account_index}/fills",
