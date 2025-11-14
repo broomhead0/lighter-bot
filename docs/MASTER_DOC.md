@@ -1,7 +1,7 @@
 # MASTER DOCUMENT - Lighter Bot Profitability Journey
 
-**Last Updated**: November 15, 2025  
-**Purpose**: Single source of truth for bot state, learnings, and iteration strategy  
+**Last Updated**: November 15, 2025
+**Purpose**: Single source of truth for bot state, learnings, and iteration strategy
 **When Context is Lost**: Read this document first to get back up to speed
 
 ---
@@ -323,6 +323,17 @@ railway logs --service lighter-bot --tail 2000 | grep -E "(ERROR|CRITICAL|code=2
 3. **Can we prevent large inventory builds?** → Fast fills make this hard
 4. **Should we pause in high volatility?** → Need more data
 5. **Can we predict downtrends earlier?** → Current 4 bps threshold seems good
+
+### 📊 Time-Based PnL Analysis (Future)
+**TODO**: After ~1 week of data, analyze PnL trends by:
+- **Day of week**: Do we perform better on certain days?
+- **Hour of day**: Are there profitable hours vs losing hours?
+- **Market hours**: NY hours (9am-4pm ET) vs overnight vs weekend
+- **Time periods**: Morning vs afternoon vs evening performance
+- **Correlation with volatility**: Time-based volatility patterns vs PnL
+- **Correlation with volume**: Trading volume by time vs PnL
+
+**Purpose**: Identify optimal trading windows and potentially pause/scale during unprofitable periods.
 
 ---
 
