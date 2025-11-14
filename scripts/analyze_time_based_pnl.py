@@ -92,28 +92,37 @@ def analyze_time_based_pnl(input_path: Path) -> Dict[str, any]:
 
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
+    # For cumulative values (true_pnl_quote), we need to track previous value to calculate delta
+    prev_pnl_by_market: Dict[str, float] = {}
+
     with input_path.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        for row in reader:
+        rows = list(reader)
+        
+        # Check if using true_pnl_quote (cumulative values)
+        using_true_pnl = rows and rows[0].get("true_pnl_quote") is not None and rows[0].get("true_pnl_quote") != ""
+        
+        for row in rows:
             try:
                 # Parse timestamp
                 ts = int(row.get("bucket_start_ts", row.get("start_ts", 0)))
                 dt = parse_timestamp(ts)
 
-                # Get PnL and volume - prefer true_pnl_quote if available, otherwise use realized_quote (cash flow)
-                # true_pnl_quote is profitability (realized + unrealized)
-                # realized_quote is cash flow (deprecated, kept for backwards compatibility)
-                
-                # Check if true_pnl_quote exists in this row (field exists and has value)
-                using_true_pnl = row.get("true_pnl_quote") is not None and row.get("true_pnl_quote") != ""
-                
-                if using_true_pnl:
-                    pnl = float(row.get("true_pnl_quote", 0.0))
-                else:
-                    pnl = float(row.get("realized_quote", 0.0))
-                
+                market = row.get("market", "")
                 volume = float(row.get("notional_abs", 0.0))
                 fill_count = int(row.get("fill_count", 0))
+
+                # Get PnL - handle cumulative vs delta values
+                if using_true_pnl:
+                    # true_pnl_quote is cumulative - calculate delta from previous window
+                    current_pnl = float(row.get("true_pnl_quote", 0.0))
+                    prev_pnl = prev_pnl_by_market.get(market, 0.0)
+                    pnl_delta = current_pnl - prev_pnl  # Change in PnL for this window
+                    prev_pnl_by_market[market] = current_pnl
+                    pnl = pnl_delta
+                else:
+                    # realized_quote is per-window delta (cash flow)
+                    pnl = float(row.get("realized_quote", 0.0))
 
                 # Update totals
                 stats["total"]["pnl"] += pnl
@@ -153,8 +162,14 @@ def analyze_time_based_pnl(input_path: Path) -> Dict[str, any]:
             except (ValueError, KeyError) as e:
                 print(f"Warning: Skipping row due to error: {e}")
                 continue
+    
+    # Return stats and final cumulative PnL (last row's value)
+    final_pnl = 0.0
+    if using_true_pnl and rows:
+        last_row = rows[-1]
+        final_pnl = float(last_row.get("true_pnl_quote", 0.0))
 
-    return stats
+    return stats, final_pnl
 
 
 def calculate_metrics(stats: Dict) -> Dict:
@@ -419,20 +434,28 @@ def main() -> None:
         return
 
     print(f"Analyzing time-based PnL from {args.input}...")
-    
+
     # Check input file for true_pnl_quote field
     import csv as csv_module
     with open(args.input, 'r') as f:
         reader = csv_module.DictReader(f)
         fieldnames = reader.fieldnames or []
         using_true_pnl = "true_pnl_quote" in fieldnames
-    
-    stats = analyze_time_based_pnl(args.input)
+
+    stats, final_pnl = analyze_time_based_pnl(args.input)
     metrics = calculate_metrics(stats)
 
     pnl_type = "True PnL (profitability)" if using_true_pnl else "Cash Flow (deprecated)"
     print(f"\nAnalyzing: {pnl_type}")
-    print(f"Total PnL: ${stats['total']['pnl']:.2f}")
+    
+    if using_true_pnl:
+        # For cumulative values, show the final value and the sum of deltas
+        print(f"Total PnL (sum of window deltas): ${stats['total']['pnl']:.2f}")
+        print(f"Final Cumulative PnL (last window): ${final_pnl:.2f}")
+        print(f"⚠️  Note: If values don't match, check calculation.")
+    else:
+        print(f"Total PnL: ${stats['total']['pnl']:.2f}")
+    
     print(f"Total Fills: {stats['total']['count']:,}")
     print(f"Total Volume: ${stats['total']['volume']:,.2f}")
     
@@ -441,6 +464,7 @@ def main() -> None:
         print("   Re-export CSV with updated export script to get true PnL (true_pnl_quote).")
     else:
         print("\n✅ Using true PnL data (profitability including unrealized losses)")
+        print("   Analyzing PnL CHANGES per window (deltas from cumulative values)")
 
     write_csv(args.output, stats, metrics)
     write_report(args.report, stats, metrics)
