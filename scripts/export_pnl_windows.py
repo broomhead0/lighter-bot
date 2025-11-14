@@ -55,6 +55,14 @@ def aggregate_windows(
 ) -> List[Mapping[str, object]]:
     buckets: Dict[int, Dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     meta: Dict[int, Dict[str, object]] = defaultdict(dict)
+    
+    # Track FIFO lots per market for realized PnL calculation
+    from collections import deque
+    fifo_lots: Dict[str, deque] = defaultdict(deque)  # market -> deque of (size, price)
+    inventory: Dict[str, Decimal] = defaultdict(Decimal)  # market -> inventory
+    
+    # Track last mid price per market for unrealized PnL
+    last_mid: Dict[str, Decimal] = {}  # market -> last mid price
 
     for event in ledger.iter_events():
         if market_filter and event.market != market_filter:
@@ -63,6 +71,7 @@ def aggregate_windows(
         entry = buckets[bucket]
         numbers = event.as_decimals()
 
+        # Cash flow (original calculation)
         entry["realized_quote"] += numbers["quote_delta"] - numbers["fee_paid"]
         entry["fees_paid"] += numbers["fee_paid"]
         entry["notional_abs"] += abs(numbers["notional"])
@@ -72,6 +81,56 @@ def aggregate_windows(
             entry["maker_volume"] += abs(numbers["notional"])
         elif event.role.lower() == "taker":
             entry["taker_volume"] += abs(numbers["notional"])
+
+        # Track inventory
+        inventory[event.market] += numbers["base_delta"]
+        entry["inventory_at_end"] = inventory[event.market]
+        
+        # Track mid price
+        if numbers.get("mid_price") is not None:
+            last_mid[event.market] = numbers["mid_price"]
+
+        # Calculate FIFO realized PnL (only for maker fills)
+        if event.role.lower() == "maker":
+            lots = fifo_lots[event.market]
+            base_delta = numbers["base_delta"]
+            fill_price = numbers["price"]
+            fee_actual = numbers["fee_paid"]
+            realized = Decimal("0")
+
+            if base_delta > 0:  # Buying (closing shorts or opening longs)
+                remaining = base_delta
+                while lots and lots[0][0] < 0 and remaining > 0:
+                    short_lot = lots[0]
+                    lot_size, lot_price = short_lot
+                    matched = min(remaining, -lot_size)
+                    realized += (lot_price - fill_price) * matched  # Profit when covering shorts
+                    lot_size += matched  # lot_size is negative
+                    remaining -= matched
+                    if lot_size == 0:
+                        lots.popleft()
+                    else:
+                        short_lot[0] = lot_size
+                if remaining > 0:
+                    lots.append([remaining, fill_price])  # Opening new long position
+            elif base_delta < 0:  # Selling (closing longs or opening shorts)
+                remaining = -base_delta
+                while lots and lots[0][0] > 0 and remaining > 0:
+                    long_lot = lots[0]
+                    lot_size, lot_price = long_lot
+                    matched = min(remaining, lot_size)
+                    realized += (fill_price - lot_price) * matched  # Profit when closing longs
+                    lot_size -= matched
+                    remaining -= matched
+                    if lot_size == 0:
+                        lots.popleft()
+                    else:
+                        long_lot[0] = lot_size
+                if remaining > 0:
+                    lots.appendleft([-remaining, fill_price])  # Opening new short position
+
+            realized -= fee_actual  # Subtract fees
+            entry["fifo_realized_quote"] = entry.get("fifo_realized_quote", Decimal("0")) + realized
 
         # Track first/last timestamps for readability
         meta_bucket = meta[bucket]
@@ -83,24 +142,57 @@ def aggregate_windows(
         meta_bucket["fill_count"] = meta_bucket.get("fill_count", 0) + 1
 
     rows: List[Mapping[str, object]] = []
+    cumulative_fifo_realized: Dict[str, Decimal] = defaultdict(Decimal)  # Track cumulative FIFO realized per market
+    
     for bucket in sorted(buckets.keys()):
         entry = buckets[bucket]
         info = meta[bucket]
+        market = info.get("market", "")
+        
+        # Get FIFO realized PnL for this window (delta from previous)
+        fifo_realized_delta = float(entry.get("fifo_realized_quote", Decimal("0")))
+        cumulative_fifo_realized[market] += Decimal(str(fifo_realized_delta))
+        
+        # Calculate unrealized PnL at end of window
+        # unrealized = sum(lot_size * (current_mid - lot_cost_basis)) for all open lots
+        unrealized = Decimal("0")
+        if market in fifo_lots and market in last_mid:
+            lots = fifo_lots[market]
+            mid = last_mid.get(market, Decimal("0"))
+            # Mark to market: calculate unrealized PnL on all open lots
+            for lot_size, lot_price in lots:
+                # lot_size is positive for longs, negative for shorts
+                # For longs: unrealized = size * (mid - cost)
+                # For shorts: unrealized = size * (cost - mid) = -size * (mid - cost)
+                # Combined: unrealized = lot_size * (mid - lot_price)
+                # But lot_size is positive for longs, negative for shorts, so:
+                if lot_size > 0:  # Long position
+                    unrealized += lot_size * (mid - lot_price)
+                else:  # Short position (lot_size is negative)
+                    unrealized += lot_size * (mid - lot_price)  # lot_size is negative, so this works
+        
+        # True PnL = FIFO realized + unrealized
+        true_pnl = cumulative_fifo_realized[market] + unrealized
+        
         rows.append(
             {
                 "bucket_start_ts": bucket,
                 "window_seconds": window_seconds,
                 "start_ts": int(info.get("start_ts", bucket)),
                 "end_ts": int(info.get("end_ts", bucket + window_seconds)),
-                "market": info.get("market"),
+                "market": market,
                 "fill_count": info.get("fill_count", 0),
-                "realized_quote": float(entry["realized_quote"]),
+                "realized_quote": float(entry["realized_quote"]),  # Cash flow (deprecated)
+                "fifo_realized_quote": float(cumulative_fifo_realized[market]),  # True FIFO realized PnL
+                "unrealized_quote": float(unrealized),  # Unrealized PnL at end of window
+                "true_pnl_quote": float(true_pnl),  # True PnL = FIFO realized + unrealized
                 "fees_paid": float(entry["fees_paid"]),
                 "maker_volume": float(entry.get("maker_volume", Decimal("0"))),
                 "taker_volume": float(entry.get("taker_volume", Decimal("0"))),
                 "hedger_volume": float(entry.get("hedger_volume", Decimal("0"))),
                 "notional_abs": float(entry["notional_abs"]),
                 "base_delta": float(entry["base_delta"]),
+                "inventory_at_end": float(entry.get("inventory_at_end", Decimal("0"))),
             }
         )
     return rows

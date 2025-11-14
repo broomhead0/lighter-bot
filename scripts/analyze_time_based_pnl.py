@@ -100,10 +100,15 @@ def analyze_time_based_pnl(input_path: Path) -> Dict[str, any]:
                 ts = int(row.get("bucket_start_ts", row.get("start_ts", 0)))
                 dt = parse_timestamp(ts)
 
-                # Get PnL and volume
-                pnl = float(row.get("realized_quote", 0.0))
+                # Get PnL and volume - prefer true_pnl_quote if available, otherwise use realized_quote (cash flow)
+                # true_pnl_quote is profitability (realized + unrealized)
+                # realized_quote is cash flow (deprecated, kept for backwards compatibility)
+                pnl = float(row.get("true_pnl_quote", row.get("realized_quote", 0.0)))
                 volume = float(row.get("notional_abs", 0.0))
                 fill_count = int(row.get("fill_count", 0))
+                
+                # Check if we're using true PnL or cash flow
+                using_true_pnl = "true_pnl_quote" in row
 
                 # Update totals
                 stats["total"]["pnl"] += pnl
@@ -418,9 +423,18 @@ def main() -> None:
     stats = analyze_time_based_pnl(args.input)
     metrics = calculate_metrics(stats)
 
-    print(f"\nTotal PnL: ${stats['total']['pnl']:.2f}")
+    # Check if we used true PnL or cash flow
+    using_true_pnl = any("true_pnl_quote" in str(row) for _ in stats.values() if isinstance(_, dict) for row in [stats])
+    
+    pnl_type = "True PnL (profitability)" if using_true_pnl else "Cash Flow (deprecated)"
+    print(f"\nAnalyzing: {pnl_type}")
+    print(f"Total PnL: ${stats['total']['pnl']:.2f}")
     print(f"Total Fills: {stats['total']['count']:,}")
     print(f"Total Volume: ${stats['total']['volume']:,.2f}")
+    
+    if not using_true_pnl:
+        print("\n⚠️  WARNING: Using cash flow data (realized_quote).")
+        print("   Re-export CSV with updated export script to get true PnL (true_pnl_quote).")
 
     write_csv(args.output, stats, metrics)
     write_report(args.report, stats, metrics)
