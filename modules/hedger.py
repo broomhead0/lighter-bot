@@ -114,6 +114,13 @@ class Hedger:
         self.guard_max_slippage_bps = float(
             hedger_cfg.get("guard_max_slippage_bps", self.max_slippage_bps)
         )
+        # Exchange minimums (same as maker) - needed for clip quantization
+        self.exchange_min_size = float(maker_cfg.get("exchange_min_size", 0.061))
+        self.exchange_min_notional = float(maker_cfg.get("exchange_min_notional", 10.5))
+        try:
+            self.size_scale = int(float(maker_cfg.get("size_scale", 1000)))
+        except Exception:
+            self.size_scale = 1000
 
         # If taker fees are zero (standard tier), force dry-run to avoid accidental cost.
         if self.taker_fee_actual == Decimal("0") and not self._explicit_dry_run:
