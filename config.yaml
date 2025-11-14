@@ -27,7 +27,7 @@ maker:
   exchange_min_size: 0.061
   # Lower soft cap to trigger earlier (findings: inventory buildup causes bleed)
   inventory_soft_cap: 0.05
-  spread_bps: 12.0
+  spread_bps: 13.0  # Widened slightly for overnight conservatism (was 12.0)
   price_scale: 1000
   size_scale: 1000
   volatility:
