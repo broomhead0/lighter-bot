@@ -324,14 +324,23 @@ railway logs --service lighter-bot --tail 2000 | grep -E "(ERROR|CRITICAL|code=2
 4. **Should we pause in high volatility?** → Need more data
 5. **Can we predict downtrends earlier?** → Current 4 bps threshold seems good
 
-### 📊 Time-Based PnL Analysis (Future)
-**TODO**: After ~1 week of data, analyze PnL trends by:
-- **Day of week**: Do we perform better on certain days?
-- **Hour of day**: Are there profitable hours vs losing hours?
-- **Market hours**: NY hours (9am-4pm ET) vs overnight vs weekend
-- **Time periods**: Morning vs afternoon vs evening performance
-- **Correlation with volatility**: Time-based volatility patterns vs PnL
-- **Correlation with volume**: Trading volume by time vs PnL
+### 📊 Time-Based PnL Analysis ✅
+**Status**: Script created and initial analysis complete
+
+**Script**: `scripts/analyze_time_based_pnl.py`
+- Analyzes PnL trends by day of week, hour of day, time periods, and market hours
+- Outputs CSV data and markdown report
+- Initial analysis shows limited patterns (mostly Friday data)
+
+**Usage**:
+```bash
+python3 scripts/analyze_time_based_pnl.py --input data/analysis/pnl_5m.csv
+```
+
+**Next Steps**: 
+- Run analysis after collecting more data (ideally 7+ days)
+- Compare NY hours (9am-4pm ET) vs overnight vs weekend performance
+- Identify optimal trading windows and potentially pause/scale during unprofitable periods
 
 **Purpose**: Identify optimal trading windows and potentially pause/scale during unprofitable periods.
 
