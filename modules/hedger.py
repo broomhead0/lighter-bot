@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from decimal import Decimal
 from typing import Any, Dict, Optional
@@ -353,7 +354,6 @@ class Hedger:
             min_size_for_notional = Decimal(str(self.exchange_min_notional)) / Decimal(str(mid))
             if hedge_units < min_size_for_notional:
                 # Round up to nearest lot step to meet notional
-                import math
                 raw_units = float(min_size_for_notional)
                 scale = max(1, self.size_scale)
                 quantized = math.ceil(raw_units * scale) / float(scale)
