@@ -85,29 +85,30 @@ maker:
   pnl_guard:
     enabled: true
     window_seconds: 300
-    realized_floor_quote: -0.5
-    trigger_consecutive: 2
-    widen_bps: 4.0
+    # Trigger earlier and immediately to prevent deeper losses
+    realized_floor_quote: -0.20  # Trigger earlier (was -0.50)
+    trigger_consecutive: 1  # Trigger immediately (was 2)
+    widen_bps: 6.0  # Wider spreads when engaged (was 4.0)
     size_multiplier: 0.85
     cooldown_seconds: 120
     check_interval_seconds: 15
-    max_extra_bps: 8.0
+    max_extra_bps: 10.0  # Allow more aggressive widening (was 8.0)
     min_size_multiplier: 0.6
 hedger:
   enabled: true
   dry_run: false
   market: market:2
-  # Hedge earlier to prevent inventory buildup (findings: inventory = bleed, correlation -1.0)
-  trigger_units: 0.015
+  # Hedge even earlier to prevent inventory buildup (findings: inventory = bleed, correlation -1.0)
+  trigger_units: 0.010  # Hedge earlier (was 0.015)
   trigger_notional: 4.0
-  # Flatter target to reduce residual inventory (findings: any inventory costs money)
-  target_units: 0.003
+  # Nearly flat target to reduce residual inventory (findings: any inventory costs money)
+  target_units: 0.001  # Nearly flat (was 0.003)
   # Smaller max clip to reduce large crosses (findings: large crosses cost $16-18 each)
-  max_clip_units: 0.04
+  max_clip_units: 0.03  # Smaller clips (was 0.04)
   price_offset_bps: 10
   max_slippage_bps: 12
   poll_interval_seconds: 1.0
-  cooldown_seconds: 3.0
+  cooldown_seconds: 2.0  # Faster response (was 3.0)
   max_attempts: 3
   retry_backoff_seconds: 2.0
   prefer_passive: true
