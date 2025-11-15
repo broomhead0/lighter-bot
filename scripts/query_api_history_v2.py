@@ -42,7 +42,7 @@ def load_config(path: Path) -> Dict[str, Any]:
         return {}
 
 
-def generate_fresh_token() -> Optional[str]:
+async def generate_fresh_token() -> Optional[str]:
     """Generate a fresh token using SignerClient directly or refresh_ws_token.py."""
     import sys
     import os
@@ -106,7 +106,7 @@ def generate_fresh_token() -> Optional[str]:
             finally:
                 await signer.close()
         
-        token = asyncio.run(_generate())
+        token = await _generate()
         print(f"✅ Generated fresh token via SignerClient: {token[:30]}...")
         return token
     except ImportError:
@@ -261,7 +261,7 @@ async def main() -> None:
 
     # Get bearer token - always try to generate fresh first, then fall back to provided/env var
     print("Attempting to generate fresh auth token...")
-    bearer_token = generate_fresh_token()
+    bearer_token = await generate_fresh_token()
     
     # If generation failed, fall back to provided token or env var
     if not bearer_token:
