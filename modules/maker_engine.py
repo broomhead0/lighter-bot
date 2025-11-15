@@ -154,6 +154,17 @@ class MakerEngine:
         self._trend_state: str = "neutral"
         self._downtrend_cooldown_until: float = 0.0
         self._trend_signal: str = "neutral"
+        
+        # Feature modules (optional - can use feature module or fallback to old logic)
+        self._trend_feature: Optional[TrendFilter] = None
+        if TrendFilter is not None:
+            try:
+                # Try to use feature module if available
+                # Check if features system is enabled (future: config.features.enabled)
+                # For now, still use old logic as fallback
+                pass  # Will enable when features system is ready
+            except Exception:
+                pass
         regimes_cfg = maker_cfg.get("regimes") or {}
         aggressive_cfg = regimes_cfg.get("aggressive") or {}
         defensive_cfg = regimes_cfg.get("defensive") or {}
@@ -252,7 +263,12 @@ class MakerEngine:
                     await asyncio.sleep(self.refresh_seconds)
                     continue
 
-                trend_bias, extra_spread = self._update_trend_state(mid)
+                # Use trend feature module if available, else fallback to old logic
+                if self._trend_feature and self._trend_feature.enabled:
+                    self._trend_feature.update(mid)
+                    trend_bias, extra_spread = self._trend_feature.get_spread_adjustment_and_bias(mid)
+                else:
+                    trend_bias, extra_spread = self._update_trend_state(mid)
 
                 # Phase 2: Get inventory for spread widening and size reduction
                 inventory = Decimal("0")
