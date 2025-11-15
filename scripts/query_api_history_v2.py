@@ -184,6 +184,12 @@ async def fetch_all_trades(
                     print(f"      railway variables --set LIGHTER_API_BEARER=<fresh_token>")
                     print(f"   3. Or run this script with --token <fresh_token>")
                     break
+                elif resp.status_code == 429:
+                    print(f"\n⚠️  Rate limited (429) - waiting 5 seconds...")
+                    await asyncio.sleep(5)
+                    # Retry this page
+                    offset -= limit
+                    continue
                 elif resp.status_code != 200:
                     print(f"\n❌ Error {resp.status_code}: {resp.text[:200]}")
                     break
@@ -210,6 +216,9 @@ async def fetch_all_trades(
                 # For next page, try increasing offset
                 # Note: API might not support offset, in which case we'd need cursor-based pagination
                 offset += limit
+                
+                # Rate limiting: add small delay to avoid 429 errors
+                await asyncio.sleep(0.1)  # 100ms delay between requests
 
                 # Continue until we get fewer than limit trades (end of data)
                 # Also have a very high safety limit to prevent infinite loops
