@@ -45,7 +45,7 @@ async def query_fills_via_api():
 
     # Always generate a fresh token (tokens expire after 1 hour)
     # This ensures we have a valid token for each API request
-    # Use the same approach as refresh_ws_token.py
+    # Strategy: Try to generate directly, if that fails, call refresh_ws_token.py
     bearer_token = None
     api_key = os.getenv("API_KEY_PRIVATE_KEY", "")
     api_key_index = int(os.getenv("API_KEY_INDEX", "3"))
@@ -57,9 +57,10 @@ async def query_fills_via_api():
             print("  Using LIGHTER_API_BEARER from environment (may be expired)")
     else:
         print("Generating fresh auth token...")
+        token_generated = False
+        
+        # Method 1: Try direct import (works if lighter-python is installed)
         try:
-            # Try importing lighter the same way refresh_ws_token.py does
-            # This is the most reliable method since refresh_ws_token.py works
             from lighter import SignerClient  # type: ignore
             
             print("  ✅ SignerClient imported successfully")
@@ -82,24 +83,50 @@ async def query_fills_via_api():
             token = await generate_token()
             bearer_token = token
             print(f"✅ Generated fresh auth token: {token[:30]}...")
+            token_generated = True
             
-        except ImportError as e:
-            print(f"⚠️  lighter-python not available: {e}")
+        except ImportError:
+            print("  ⚠️  lighter-python not available for direct import")
+            print("  Trying to use refresh_ws_token.py script...")
+            
+            # Method 2: Try calling refresh_ws_token.py as a subprocess
+            try:
+                import subprocess
+                import sys
+                
+                script_path = Path(__file__).parent / "refresh_ws_token.py"
+                if script_path.exists():
+                    print(f"  Calling {script_path.name} to generate token...")
+                    result = subprocess.run(
+                        [sys.executable, str(script_path), "--dry-run"],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    if result.returncode == 0:
+                        # Extract token from output (format: "WS token: <token>")
+                        for line in result.stdout.split("\n"):
+                            if line.startswith("WS token:"):
+                                token = line.split("WS token:")[1].strip()
+                                bearer_token = token
+                                print(f"✅ Generated fresh auth token via refresh_ws_token.py: {token[:30]}...")
+                                token_generated = True
+                                break
+                    else:
+                        print(f"  ⚠️  refresh_ws_token.py failed: {result.stderr[:200]}")
+                else:
+                    print("  ⚠️  refresh_ws_token.py not found")
+            except Exception as e:
+                print(f"  ⚠️  Could not call refresh_ws_token.py: {e}")
+        
+        # Fallback to env var if token generation failed
+        if not token_generated:
             print("  Falling back to LIGHTER_API_BEARER from environment (may be expired)")
-            # Fallback to env var if available
             bearer_token = os.getenv("LIGHTER_API_BEARER", "")
             if bearer_token:
                 print(f"  Using LIGHTER_API_BEARER: {bearer_token[:30]}...")
             else:
                 print("  ❌ Cannot proceed without token generation or LIGHTER_API_BEARER")
-        except Exception as e:
-            print(f"⚠️  Could not generate token: {e}")
-            import traceback
-            traceback.print_exc()
-            # Fallback to env var if available
-            bearer_token = os.getenv("LIGHTER_API_BEARER", "")
-            if bearer_token:
-                print(f"  Falling back to LIGHTER_API_BEARER: {bearer_token[:30]}...")
 
     print(f"Querying Lighter API: {base_url}")
     print(f"Account: {account_index}")
