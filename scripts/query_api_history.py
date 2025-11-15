@@ -123,7 +123,7 @@ async def query_fills_via_api():
                     "account_index": account_index,
                     "sort_by": "timestamp",
                     "sort_dir": "desc",
-                    "limit": 1000,  # Try larger limit
+                    "limit": 100,  # fetch_trades.py uses 100-200
                     "auth": bearer_token,
                 }
                 print(f"Trying: {url} with auth token")
