@@ -211,10 +211,11 @@ async def fetch_all_trades(
                 # Note: API might not support offset, in which case we'd need cursor-based pagination
                 offset += limit
 
-                # Safety limit: stop after 1000 trades (10 pages with limit=100)
-                if len(all_trades) >= 1000:
-                    print(f"\n⚠️  Reached safety limit of 1000 trades. Stopping.")
-                    print(f"   (This might not be all trades - API may not support pagination)")
+                # Safety limit: stop after 10000 trades (100 pages with limit=100)
+                # This should cover all trades since inception
+                if len(all_trades) >= 10000:
+                    print(f"\n⚠️  Reached safety limit of 10000 trades. Stopping.")
+                    print(f"   (This should cover all trades - adjust limit if needed)")
                     break
 
             except Exception as e:
