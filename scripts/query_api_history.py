@@ -85,13 +85,8 @@ async def query_fills_via_api():
         f"/api/v1/account/{account_index}/trades",
         f"/api/v1/orders?account={account_index}",
         f"/api/v1/fills?account={account_index}",
-        # Trades endpoint (requires sort_by and limit - try various limits)
-        # Note: limit=100 gave different error, might need smaller values
-        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=50",
-        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=100",
-        f"/api/v1/trades?account={account_index}&sort_by=timestamp&limit=200",
-        f"/api/v1/trades?account={account_index}&sort_by=block_height&limit=100",
-        f"/api/v1/trades?account={account_index}&sort_by=trade_id&limit=100",
+        # Trades endpoint (like fetch_trades.py - uses account_index and auth in query params)
+        f"/api/v1/trades",  # Will add params separately with auth
         # Alternative patterns
         f"/api/account/{account_index}/orders",
         f"/api/account/{account_index}/fills",
@@ -100,13 +95,8 @@ async def query_fills_via_api():
     ]
 
     headers = {}
-    # Use Bearer token (like fetch_trades.py does)
-    if bearer_token:
-        headers["Authorization"] = f"Bearer {bearer_token}"
-        print(f"Using Bearer token authentication")
-    elif api_key:
-        # Fallback to X-API-KEY
-        headers["X-API-KEY"] = api_key
+    # fetch_trades.py uses 'auth' as a query parameter, not a header!
+    # So we'll add auth to query params, not headers
 
     # Try REST API directly (use httpx which is in requirements.txt)
     try:
