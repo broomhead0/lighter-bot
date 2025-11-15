@@ -106,8 +106,14 @@ async def fetch_all_trades(
                 resp = await client.get(url, params=params)
                 
                 if resp.status_code == 401:
-                    print(f"\n❌ Unauthorized (401) - token may be expired")
+                    print(f"\n❌ Unauthorized (401) - token is expired")
                     print(f"   Response: {resp.text[:200]}")
+                    print(f"\n💡 Solution: Generate a fresh token:")
+                    print(f"   1. Run locally (where lighter-python is installed):")
+                    print(f"      python3 scripts/refresh_ws_token.py")
+                    print(f"   2. Update Railway env var:")
+                    print(f"      railway variables --set LIGHTER_API_BEARER=<fresh_token>")
+                    print(f"   3. Or run this script with --token <fresh_token>")
                     break
                 elif resp.status_code != 200:
                     print(f"\n❌ Error {resp.status_code}: {resp.text[:200]}")
