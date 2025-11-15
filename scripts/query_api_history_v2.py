@@ -44,18 +44,47 @@ def load_config(path: Path) -> Dict[str, Any]:
 
 def generate_fresh_token() -> Optional[str]:
     """Generate a fresh token using SignerClient directly or refresh_ws_token.py."""
+    import sys
+    import os
+    
     # Try direct import first (if lighter-python is installed)
     try:
-        # Try common user site-packages paths
-        import sys
-        import os
-        user_site = os.path.expanduser("~/.local/lib/python3.11/site-packages")
-        if os.path.exists(user_site):
-            sys.path.insert(0, user_site)
-        
+        from lighter import SignerClient
+        print("  ✅ SignerClient imported successfully")
+    except ImportError:
+        print("  ⚠️  lighter-python not found, attempting to install...")
+        # Try to install lighter-python
+        try:
+            import subprocess
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--quiet", "git+https://github.com/elliottech/lighter-python.git"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                print("  ✅ lighter-python installed successfully")
+                # Try importing again
+                try:
+                    from lighter import SignerClient
+                    print("  ✅ SignerClient imported after installation")
+                except ImportError:
+                    print("  ⚠️  Still cannot import after installation")
+                    return None
+            else:
+                print(f"  ⚠️  Installation failed: {result.stderr[:200]}")
+                # Try refresh_ws_token.py instead
+                pass
+        except Exception as e:
+            print(f"  ⚠️  Could not install lighter-python: {e}")
+            # Try refresh_ws_token.py instead
+            pass
+    
+    # If we have SignerClient, use it
+    try:
         from lighter import SignerClient
         
-        print("  ✅ SignerClient imported directly, generating token...")
+        print("  ✅ SignerClient available, generating token...")
         
         async def _generate():
             base_url = os.getenv("API_BASE_URL", "https://mainnet.zklighter.elliot.ai")
@@ -80,9 +109,8 @@ def generate_fresh_token() -> Optional[str]:
         token = asyncio.run(_generate())
         print(f"✅ Generated fresh token via SignerClient: {token[:30]}...")
         return token
-        
     except ImportError:
-        print("  ⚠️  lighter-python not available for direct import, trying refresh_ws_token.py...")
+        print("  ⚠️  Still cannot import SignerClient, trying refresh_ws_token.py...")
     
     # Fallback: Try refresh_ws_token.py script
     try:
