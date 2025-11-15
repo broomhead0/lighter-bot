@@ -8,7 +8,46 @@
 
 ## 🎯 Current Goal
 
-**Make the bot profitable** - Currently losing ~-$0.25/hour, need to reach break-even or positive.
+**Simplify and rebuild incrementally** - After a week of iteration, still losing ~-$0.25/hour. Strategy changed to:
+1. Strip down to minimal viable bot (baseline)
+2. Add features back one by one with testing
+3. Only keep features that clearly help
+
+**Key Insight**: Simpler trend-following bot is more profitable. Too much complexity makes it hard to tune and reason about.
+
+---
+
+## 🔄 Current Strategy: Simplification & Incremental Testing
+
+### Decision (Nov 15, 2025)
+After comprehensive analysis, we're starting from scratch with a simplified baseline, then adding features back incrementally.
+
+**Plan**: See `docs/SIMPLIFICATION_PLAN.md` for full details
+
+**Decisions Made**:
+- **Baseline spread**: 15 bps (conservative start)
+- **Testing duration**: 24 hours minimum (48 hours preferred)
+- **Priority features**: Trend → Inventory → PnL Guard
+- **Rollback threshold**: If baseline loses > -$0.30/hr, rollback immediately
+
+### Implementation Phases
+
+**Phase 0: Extract Features** (In Progress)
+- Extract complex logic into `modules/features/` modules
+- Make all features optional/pluggable
+- No behavior change - just reorganization
+
+**Phase 1: Minimal Baseline** (Next)
+- Core only: basic maker, simple hedger
+- All complex features disabled
+- Test 24-48 hours
+
+**Phase 2: Add Features Incrementally** (Future)
+- Add one feature at a time
+- Test each for 24-48 hours
+- Keep only if improves PnL
+
+---
 
 ---
 
@@ -299,7 +338,14 @@ railway logs --service lighter-bot --tail 2000 | grep -E "(ERROR|CRITICAL|code=2
 
 ## 📝 Recent Changes History
 
-### November 15, 2025
+### November 15, 2025 - Simplification Strategy
+- ✅ Comprehensive analysis of what helps vs hurts (see `docs/SIMPLIFICATION_ANALYSIS.md`)
+- ✅ Created simplification plan: start from scratch, add back incrementally (see `docs/SIMPLIFICATION_PLAN.md`)
+- ✅ Decision: Strip to baseline, then add features one by one with testing
+- ✅ Phase 0: Extract features into modules (preserve old logic, make optional)
+- 🔄 **Status**: Implementing Phase 0 (extraction)
+
+### November 15, 2025 - Earlier
 - ✅ Fixed hedger notional bug (critical)
 - ✅ Tightened hedger params (trigger 0.008, target 0.0005, cooldown 1.5s)
 - ✅ Created MASTER_DOC.md for context persistence
