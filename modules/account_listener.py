@@ -485,27 +485,41 @@ class AccountListener:
         except Exception:
             pass
         self._set_inventory(market, value)
-        
+
         # Log position updates with PnL for analysis (source of truth from exchange!)
+        # This matches UI PnL exactly - much simpler than reconstructing from trades!
         realized_pnl = entry.get("realized_pnl")
         unrealized_pnl = entry.get("unrealized_pnl")
-        if realized_pnl is not None and self.metrics_ledger:
-            # Store in position ledger for time-based analysis
+        if realized_pnl is not None:
             try:
-                from metrics.ledger import PositionEvent
+                import json
                 import time as time_module
-                from dataclasses import dataclass
+                from pathlib import Path
                 
-                # Create position event (will append to ledger)
-                # Note: We need to define PositionEvent or use a simple JSON log
-                # For now, just log it so we can extract later
-                total_pnl = float(realized_pnl) + float(unrealized_pnl or 0)
+                # Simple JSONL file to track position updates (source of truth!)
+                positions_file = Path("data/metrics/positions.jsonl")
+                positions_file.parent.mkdir(parents=True, exist_ok=True)
+                
+                position_update = {
+                    "timestamp": time_module.time(),
+                    "market": market,
+                    "position": str(value),
+                    "realized_pnl": float(realized_pnl),
+                    "unrealized_pnl": float(unrealized_pnl or 0),
+                    "total_pnl": float(realized_pnl) + float(unrealized_pnl or 0),
+                }
+                
+                # Append to JSONL file
+                with positions_file.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(position_update, separators=(",", ":")) + "\n")
+                
+                total_pnl = position_update["total_pnl"]
                 LOG.info(
-                    "[account] position_pnl market=%s realized=%s unrealized=%s total=%s",
+                    "[account] position_pnl market=%s realized=%.2f unrealized=%.2f total=%.2f",
                     market, realized_pnl, unrealized_pnl, total_pnl
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                LOG.debug("[account] failed to log position update: %s", exc)
 
     def _compute_base_delta(self, fill: FillRecord) -> Decimal:
         size = Decimal(fill.size)

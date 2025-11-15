@@ -344,12 +344,36 @@ python3 scripts/analyze_time_based_pnl.py --input data/analysis/pnl_5m.csv
 
 **Purpose**: Identify optimal trading windows and potentially pause/scale during unprofitable periods.
 
-### 📥 Querying Full Trading History via API ✅
-**Status**: Script created and ready to use
+### 📥 Tracking Position Updates (Source of Truth) ✅
+**Status**: Implemented in `account_listener.py`
 
-**Script**: `scripts/query_api_history.py`
+**How it works**:
+- Exchange sends position updates via WebSocket with `realized_pnl` and `unrealized_pnl`
+- These values match the UI PnL exactly (source of truth!)
+- `account_listener.py` logs each position update to `data/metrics/positions.jsonl`
+- Much simpler and more reliable than reconstructing PnL from 200k+ API trades
 
-Fetches complete trading history from the Lighter REST API since account inception.
+**Format**: JSONL with timestamp, market, position, realized_pnl, unrealized_pnl, total_pnl
+
+**Usage for Analysis**:
+- Use `data/metrics/positions.jsonl` for time-based PnL analysis
+- Each line is a snapshot of PnL at that moment
+- Can aggregate by time windows (hour, day, etc.) for pattern analysis
+
+**Note**: This accumulates over time as the bot runs. Historical data from before this was implemented is not available, but going forward we'll have complete PnL history.
+
+---
+
+### 📥 Querying Full Trading History via API ⚠️ (DEPRECATED - Too Complex)
+**Status**: Working but not recommended
+
+**Why deprecated**:
+- Requires fetching 200k+ trades with rate limiting (slow, complex)
+- Needs format conversion from API to ledger format
+- Incomplete: only got partial data (-$2.28 vs UI -$36)
+- Position updates approach is simpler and more accurate
+
+**Script**: `scripts/query_api_history_v2.py`
 
 **How it works**:
 1. **Authentication**:
