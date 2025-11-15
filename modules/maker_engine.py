@@ -154,7 +154,7 @@ class MakerEngine:
         self._trend_state: str = "neutral"
         self._downtrend_cooldown_until: float = 0.0
         self._trend_signal: str = "neutral"
-        
+
         # Feature modules (optional - can use feature module or fallback to old logic)
         # For Phase 0: Extract features but keep old logic as default
         # Later: Enable via config.features.enabled list
@@ -169,7 +169,7 @@ class MakerEngine:
                 # Will switch to feature module after testing extraction works
             except Exception as exc:
                 LOG.warning("[maker] failed to initialize trend feature module: %s", exc)
-        
+
         # Inventory adjustments feature
         self._inventory_feature: Optional[InventoryAdjustments] = None
         if InventoryAdjustments is not None:
@@ -180,7 +180,7 @@ class MakerEngine:
                 self._inventory_feature.set_market(self.market)
             except Exception as exc:
                 LOG.warning("[maker] failed to initialize inventory feature module: %s", exc)
-        
+
         # PnL guard feature
         self._pnl_guard_feature: Optional[PnLGuard] = None
         if PnLGuard is not None and self.pnl_guard_enabled:
@@ -323,7 +323,7 @@ class MakerEngine:
                         inventory_spread_bps = 4.0
                     elif inventory_abs > Decimal("0.01"):
                         inventory_spread_bps = 2.0
-                    
+
                     inventory_size_multiplier = 1.0
                     if inventory_abs > Decimal("0.02"):
                         inventory_size_multiplier = 0.50

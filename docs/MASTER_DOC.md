@@ -32,10 +32,16 @@ After comprehensive analysis, we're starting from scratch with a simplified base
 
 ### Implementation Phases
 
-**Phase 0: Extract Features** (In Progress)
+**Phase 0: Extract Features** (In Progress - 50% complete)
 - Extract complex logic into `modules/features/` modules
 - Make all features optional/pluggable
 - No behavior change - just reorganization
+- **Progress**:
+  - ✅ Trend filter extracted (240 lines) + integrated
+  - ✅ Inventory adjustments extracted (140 lines) + integrated
+  - ✅ PnL guard extracted (180 lines) + integrated
+  - ⏳ Remaining: Volatility, Regime, Hedger passive (3 features)
+  - Total: 1888 lines to refactor
 
 **Phase 1: Minimal Baseline** (Next)
 - Core only: basic maker, simple hedger
@@ -255,7 +261,22 @@ passive_wait_seconds: 0.5
 - Check current configuration
 - See what's working/not working
 
-### Step 2: Check Current Status
+### Step 2: Post-Phase Testing Protocol ✅
+**CRITICAL**: After completing each phase/feature extraction:
+1. **Monitor logs for 1 minute** - Watch for errors, exceptions, warnings
+2. **If errors found** - Fix them immediately
+3. **Monitor again for 1 minute** - Verify fixes worked
+4. **Repeat until clean** - No errors for full 1 minute period
+5. **Then proceed** - Only continue to next phase if logs are clean
+
+**Why**: Catch integration issues early before they cause problems in production
+
+**How to monitor**:
+```bash
+railway logs --service lighter-bot --tail 500 | grep -E "(ERROR|CRITICAL|Exception|Traceback|failed|error)" | head -20
+```
+
+### Step 3: Check Current Status
 ```bash
 # Check recent logs
 railway logs --service lighter-bot --tail 1000 | grep -E "(inventory|hedger|PnL guard)" | tail -50
