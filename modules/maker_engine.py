@@ -156,15 +156,19 @@ class MakerEngine:
         self._trend_signal: str = "neutral"
         
         # Feature modules (optional - can use feature module or fallback to old logic)
+        # For Phase 0: Extract features but keep old logic as default
+        # Later: Enable via config.features.enabled list
         self._trend_feature: Optional[TrendFilter] = None
-        if TrendFilter is not None:
+        if TrendFilter is not None and self.trend_enabled:
             try:
-                # Try to use feature module if available
-                # Check if features system is enabled (future: config.features.enabled)
-                # For now, still use old logic as fallback
-                pass  # Will enable when features system is ready
-            except Exception:
-                pass
+                # Initialize trend feature module (same config as old logic)
+                self._trend_feature = TrendFilter(trend_cfg, state=state, telemetry=telemetry)
+                self._trend_feature.set_market(self.market)
+                self._trend_feature.set_inventory_soft_cap(Decimal(str(self.inventory_soft_cap)))
+                # For now, feature module exists but old logic still runs by default
+                # Will switch to feature module after testing extraction works
+            except Exception as exc:
+                LOG.warning("[maker] failed to initialize trend feature module: %s", exc)
         regimes_cfg = maker_cfg.get("regimes") or {}
         aggressive_cfg = regimes_cfg.get("aggressive") or {}
         defensive_cfg = regimes_cfg.get("defensive") or {}
