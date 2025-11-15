@@ -352,7 +352,7 @@ python3 scripts/analyze_time_based_pnl.py --input data/analysis/pnl_5m.csv
 Fetches complete trading history from the Lighter REST API since account inception.
 
 **How it works**:
-1. **Authentication**: 
+1. **Authentication**:
    - Automatically generates a fresh Bearer token using `SignerClient` each time it runs
    - Tokens expire after 1 hour, so generating fresh ensures validity
    - Falls back to `LIGHTER_API_BEARER` env var if token generation fails (may be expired)
@@ -377,7 +377,24 @@ Fetches complete trading history from the Lighter REST API since account incepti
 - Full API history provides complete PnL calculation matching the UI
 - Enables accurate time-based analysis with full historical context
 
-**Note**: The script requires `lighter-python` package to be available for token generation. On Railway, this should be installed via `requirements.txt`. If token generation fails, the script will fall back to `LIGHTER_API_BEARER` env var (which may be expired).
+**Current Status**: ✅ **WORKING!**
+- Script automatically installs `lighter-python` if needed
+- Generates fresh auth token on each run (tokens expire after 1 hour)
+- Fetches ALL trades via pagination (continues until fewer than `limit` trades returned)
+- Successfully fetched 38,700+ trades from API
+- Handles server disconnects/timeouts gracefully
+
+**Key Implementation Details**:
+1. **Token Generation**: Uses `SignerClient` directly - if not available, automatically installs via `pip install git+https://github.com/elliottech/lighter-python.git`
+2. **Pagination**: Uses `offset` parameter - continues fetching until a page returns fewer than `limit` trades (indicating end of data)
+3. **Error Handling**: Gracefully handles server disconnects/timeouts, exports whatever was fetched
+4. **Safety Limit**: 50,000 trades max (500 pages × 100 trades) to prevent infinite loops
+
+**Usage**:
+```bash
+# On Railway (automatically generates fresh token)
+railway run --service lighter-bot python3 scripts/query_api_history_v2.py --output data/metrics/fills_api_complete.jsonl
+```
 
 ---
 

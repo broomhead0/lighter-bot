@@ -216,7 +216,7 @@ async def fetch_all_trades(
                 if len(trades) < limit:
                     print(f"(Got {len(trades)} < limit {limit}, reached end of data)")
                     break
-                
+
                 # Safety limit: stop after 50000 trades (500 pages with limit=100)
                 # This should be more than enough for any account
                 if len(all_trades) >= 50000:
@@ -225,7 +225,15 @@ async def fetch_all_trades(
                     break
 
             except Exception as e:
-                print(f"\n❌ Error fetching page: {e}")
+                error_msg = str(e)
+                print(f"\n⚠️  Error fetching page: {error_msg}")
+                # If we've already got trades, continue (might be server disconnect)
+                if len(all_trades) > 0:
+                    print(f"   Continuing with {len(all_trades)} trades fetched so far...")
+                    # For server disconnect/timeout, we got what we could
+                    if "disconnect" in error_msg.lower() or "timeout" in error_msg.lower():
+                        print(f"   (Server disconnected/timeout - fetched {len(all_trades)} trades)")
+                        break
                 break
 
     return all_trades
