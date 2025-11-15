@@ -495,11 +495,11 @@ class AccountListener:
                 import json
                 import time as time_module
                 from pathlib import Path
-                
+
                 # Simple JSONL file to track position updates (source of truth!)
                 positions_file = Path("data/metrics/positions.jsonl")
                 positions_file.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 position_update = {
                     "timestamp": time_module.time(),
                     "market": market,
@@ -508,15 +508,18 @@ class AccountListener:
                     "unrealized_pnl": float(unrealized_pnl or 0),
                     "total_pnl": float(realized_pnl) + float(unrealized_pnl or 0),
                 }
-                
+
                 # Append to JSONL file
                 with positions_file.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(position_update, separators=(",", ":")) + "\n")
-                
+
                 total_pnl = position_update["total_pnl"]
+                # Convert to float for logging (exchange sends as strings)
+                realized_float = float(realized_pnl)
+                unrealized_float = float(unrealized_pnl or 0)
                 LOG.info(
                     "[account] position_pnl market=%s realized=%.2f unrealized=%.2f total=%.2f",
-                    market, realized_pnl, unrealized_pnl, total_pnl
+                    market, realized_float, unrealized_float, total_pnl
                 )
             except Exception as exc:
                 LOG.debug("[account] failed to log position update: %s", exc)
