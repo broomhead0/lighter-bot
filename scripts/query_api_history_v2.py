@@ -46,7 +46,7 @@ async def generate_fresh_token() -> Optional[str]:
     """Generate a fresh token using SignerClient directly or refresh_ws_token.py."""
     import sys
     import os
-    
+
     # Try direct import first (if lighter-python is installed)
     try:
         from lighter import SignerClient
@@ -79,19 +79,19 @@ async def generate_fresh_token() -> Optional[str]:
             print(f"  ⚠️  Could not install lighter-python: {e}")
             # Try refresh_ws_token.py instead
             pass
-    
+
     # If we have SignerClient, use it
     try:
         from lighter import SignerClient
-        
+
         print("  ✅ SignerClient available, generating token...")
-        
+
         async def _generate():
             base_url = os.getenv("API_BASE_URL", "https://mainnet.zklighter.elliot.ai")
             api_key = os.getenv("API_KEY_PRIVATE_KEY", "")
             account_index = int(os.getenv("ACCOUNT_INDEX") or os.getenv("API_ACCOUNT_INDEX") or 366110)
             api_key_index = int(os.getenv("API_KEY_INDEX", "3"))
-            
+
             signer = SignerClient(
                 url=base_url,
                 private_key=api_key,
@@ -105,19 +105,19 @@ async def generate_fresh_token() -> Optional[str]:
                 return token
             finally:
                 await signer.close()
-        
+
         token = await _generate()
         print(f"✅ Generated fresh token via SignerClient: {token[:30]}...")
         return token
     except ImportError:
         print("  ⚠️  Still cannot import SignerClient, trying refresh_ws_token.py...")
-    
+
     # Fallback: Try refresh_ws_token.py script
     try:
         script_path = Path(__file__).parent / "refresh_ws_token.py"
         if not script_path.exists():
             return None
-        
+
         print("  Generating fresh token using refresh_ws_token.py...")
         result = subprocess.run(
             [sys.executable, str(script_path), "--dry-run"],
@@ -125,7 +125,7 @@ async def generate_fresh_token() -> Optional[str]:
             text=True,
             timeout=30,
         )
-        
+
         if result.returncode == 0:
             # Extract token from output
             for line in result.stdout.split("\n"):
@@ -133,7 +133,7 @@ async def generate_fresh_token() -> Optional[str]:
                     token = line.split("WS token:")[1].strip()
                     print(f"✅ Generated fresh token via refresh_ws_token.py: {token[:30]}...")
                     return token
-        
+
         print(f"  ⚠️  refresh_ws_token.py failed: {result.stderr[:200]}")
         return None
     except Exception as e:
@@ -211,11 +211,17 @@ async def fetch_all_trades(
                 # Note: API might not support offset, in which case we'd need cursor-based pagination
                 offset += limit
 
-                # Safety limit: stop after 10000 trades (100 pages with limit=100)
-                # This should cover all trades since inception
-                if len(all_trades) >= 10000:
-                    print(f"\n⚠️  Reached safety limit of 10000 trades. Stopping.")
-                    print(f"   (This should cover all trades - adjust limit if needed)")
+                # Continue until we get fewer than limit trades (end of data)
+                # Also have a very high safety limit to prevent infinite loops
+                if len(trades) < limit:
+                    print(f"(Got {len(trades)} < limit {limit}, reached end of data)")
+                    break
+                
+                # Safety limit: stop after 50000 trades (500 pages with limit=100)
+                # This should be more than enough for any account
+                if len(all_trades) >= 50000:
+                    print(f"\n⚠️  Reached safety limit of 50000 trades. Stopping.")
+                    print(f"   (This should cover all trades - if not, increase limit)")
                     break
 
             except Exception as e:
@@ -263,12 +269,12 @@ async def main() -> None:
     # Get bearer token - always try to generate fresh first, then fall back to provided/env var
     print("Attempting to generate fresh auth token...")
     bearer_token = await generate_fresh_token()
-    
+
     # If generation failed, fall back to provided token or env var
     if not bearer_token:
         print("Token generation failed, using provided token or LIGHTER_API_BEARER env var...")
         bearer_token = args.token or os.getenv("LIGHTER_API_BEARER")
-        
+
         if not bearer_token:
             raise SystemExit(
                 "Missing auth token. Set LIGHTER_API_BEARER env var, "
