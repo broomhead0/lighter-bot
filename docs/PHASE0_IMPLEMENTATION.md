@@ -1,6 +1,6 @@
 # Phase 0 Implementation: Feature Extraction
 
-**Status**: In Progress  
+**Status**: In Progress
 **Goal**: Extract complex features into modules without changing behavior
 
 ---
@@ -32,13 +32,15 @@ Given the size of the codebase (maker_engine.py: ~1152 lines, hedger.py: ~700+ l
 ## Progress
 
 - [x] Created features directory and __init__.py
-- [ ] Extract trend filter
+- [x] Extract trend filter → `modules/features/trend_filter.py` (240 lines)
+  - [x] Created TrendFilter class
+  - [x] Integrated into maker_engine.py with fallback
+  - [x] Old logic still runs by default (no behavior change)
 - [ ] Extract inventory adjustments  
 - [ ] Extract PnL guard
 - [ ] Extract volatility adjustments
 - [ ] Extract regime switcher
 - [ ] Extract hedger passive logic
-- [ ] Refactor maker_engine.py to use features
-- [ ] Refactor hedger.py to use features
 - [ ] Test: verify no behavior change
+- [ ] Enable feature modules via config (switch from old to new)
 
