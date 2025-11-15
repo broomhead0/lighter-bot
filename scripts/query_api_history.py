@@ -115,11 +115,47 @@ async def query_fills_via_api():
         print("Using httpx for API calls...")
         client = httpx.Client(timeout=30.0, follow_redirects=True)
         try:
+            # Try /api/v1/trades with auth in query params (like fetch_trades.py)
+            if bearer_token:
+                url = f"{base_url}/api/v1/trades"
+                # fetch_trades.py uses account_index (not account!) and auth as query params
+                params_trades = {
+                    "account_index": account_index,
+                    "sort_by": "timestamp",
+                    "sort_dir": "desc",
+                    "limit": 1000,  # Try larger limit
+                    "auth": bearer_token,
+                }
+                print(f"Trying: {url} with auth token")
+                
+                resp = client.get(url, params=params_trades, headers=headers)
+                print(f"  Status: {resp.status_code}")
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    # Check if it's wrapped
+                    trades = data.get("trades") if isinstance(data, dict) else data
+                    if trades is None:
+                        trades = data if isinstance(data, list) else []
+                    
+                    count = len(trades) if isinstance(trades, list) else 1
+                    print(f"  ✅ Success! Got {count} items")
+                    
+                    if isinstance(trades, list) and len(trades) > 0:
+                        print(f"  ✅ Looks like trade data!")
+                        return trades
+                elif resp.status_code == 400:
+                    print(f"  ❌ Error: {resp.text[:200]}")
+            
+            # Try other endpoints (without auth for now)
             for endpoint in endpoints:
+                if "/api/v1/trades" in endpoint:
+                    continue  # Already tried above
+                    
                 try:
                     url = f"{base_url}{endpoint}"
                     print(f"Trying: {url}")
-
+                    
                     resp = client.get(url, headers=headers)
                     print(f"  Status: {resp.status_code}")
 
