@@ -217,11 +217,11 @@ async def fetch_all_trades(
                     print(f"(Got {len(trades)} < limit {limit}, reached end of data)")
                     break
 
-                # Safety limit: stop after 50000 trades (500 pages with limit=100)
-                # This should be more than enough for any account
-                if len(all_trades) >= 50000:
-                    print(f"\n⚠️  Reached safety limit of 50000 trades. Stopping.")
-                    print(f"   (This should cover all trades - if not, increase limit)")
+                # Safety limit: stop after 200000 trades (2000 pages with limit=100)
+                # Keep increasing until we get all trades
+                if len(all_trades) >= 200000:
+                    print(f"\n⚠️  Reached safety limit of 200000 trades. Stopping.")
+                    print(f"   (If there are more, increase limit further)")
                     break
 
             except Exception as e:
