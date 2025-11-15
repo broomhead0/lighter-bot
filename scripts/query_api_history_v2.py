@@ -158,14 +158,30 @@ async def main() -> None:
     parser.add_argument("--limit", type=int, default=100, help="Trades per page (default: 100)")
     args = parser.parse_args()
     
-    # Load config
+    # Load config (optional - can use env vars)
     cfg = load_config(CONFIG_PATH)
     api_cfg = cfg.get("api") or {}
     
-    base_url = args.base_url or api_cfg.get("base_url") or "https://mainnet.zklighter.elliot.ai"
-    account = args.account or api_cfg.get("account_index")
+    base_url = (
+        args.base_url 
+        or os.getenv("API_BASE_URL") 
+        or api_cfg.get("base_url") 
+        or "https://mainnet.zklighter.elliot.ai"
+    )
+    
+    # Get account from args, env var, or config
+    account = (
+        args.account 
+        or os.getenv("ACCOUNT_INDEX") 
+        or os.getenv("API_ACCOUNT_INDEX")
+        or api_cfg.get("account_index")
+    )
+    
     if account is None:
-        raise SystemExit("Account identifier missing. Set api.account_index in config.yaml or pass --account.")
+        raise SystemExit(
+            "Account identifier missing. "
+            "Set ACCOUNT_INDEX env var, api.account_index in config.yaml, or pass --account."
+        )
     account_index = int(account)
     
     # Get bearer token
