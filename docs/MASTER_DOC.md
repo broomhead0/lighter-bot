@@ -344,6 +344,41 @@ python3 scripts/analyze_time_based_pnl.py --input data/analysis/pnl_5m.csv
 
 **Purpose**: Identify optimal trading windows and potentially pause/scale during unprofitable periods.
 
+### 📥 Querying Full Trading History via API ✅
+**Status**: Script created and ready to use
+
+**Script**: `scripts/query_api_history.py`
+
+Fetches complete trading history from the Lighter REST API since account inception.
+
+**How it works**:
+1. **Authentication**: 
+   - Automatically generates a fresh Bearer token using `SignerClient` each time it runs
+   - Tokens expire after 1 hour, so generating fresh ensures validity
+   - Falls back to `LIGHTER_API_BEARER` env var if token generation fails (may be expired)
+
+2. **API Endpoint**: `/api/v1/trades`
+   - Uses `account_index` (not `account`) in query params
+   - Uses `auth` token in query params (not Authorization header)
+   - Parameters: `sort_by=timestamp`, `sort_dir=desc`, `limit=100`
+   - Matches the pattern used by `scripts/fetch_trades.py`
+
+3. **Usage**:
+   ```bash
+   # On Railway (where API key is configured)
+   railway run --service lighter-bot python3 scripts/query_api_history.py --output data/metrics/fills_api.jsonl
+   ```
+
+4. **Output**: JSONL format with all trades, can be processed by `export_pnl_windows.py` for analysis
+
+**Why this matters**:
+- Local fill ledger (`data/metrics/fills_*.jsonl`) only contains recent data
+- UI PnL shows -$36 since inception, but local data only showed -$1.48
+- Full API history provides complete PnL calculation matching the UI
+- Enables accurate time-based analysis with full historical context
+
+**Note**: The script requires `lighter-python` package to be available for token generation. On Railway, this should be installed via `requirements.txt`. If token generation fails, the script will fall back to `LIGHTER_API_BEARER` env var (which may be expired).
+
 ---
 
 ## 📞 How to Use This Document
