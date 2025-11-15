@@ -352,15 +352,27 @@ python3 scripts/analyze_time_based_pnl.py --input data/analysis/pnl_5m.csv
 - These values match the UI PnL exactly (source of truth!)
 - `account_listener.py` logs each position update to `data/metrics/positions.jsonl`
 - Much simpler and more reliable than reconstructing PnL from 200k+ API trades
+- **No API calls needed** - we already receive this data via WebSocket
+- **No format conversion** - we log the PnL values directly from exchange
+- **Minimal overhead** - just append JSONL lines as updates arrive
 
 **Format**: JSONL with timestamp, market, position, realized_pnl, unrealized_pnl, total_pnl
 
 **Usage for Analysis**:
-- Use `data/metrics/positions.jsonl` for time-based PnL analysis
+- As the bot runs, `data/metrics/positions.jsonl` accumulates snapshots of PnL
+- After a week or two of running, we can analyze it by hour/day to find profitable patterns
 - Each line is a snapshot of PnL at that moment
 - Can aggregate by time windows (hour, day, etc.) for pattern analysis
+- Much simpler than reconstructing from 200k+ trades via API
 
 **Note**: This accumulates over time as the bot runs. Historical data from before this was implemented is not available, but going forward we'll have complete PnL history.
+
+**Why this approach is better**:
+- ✅ **No API calls** - Already receiving data via WebSocket
+- ✅ **No format conversion** - Direct PnL values from exchange
+- ✅ **Matches UI exactly** - Same data source as the UI uses
+- ✅ **Simple** - ~15 lines of code vs complex API scripts
+- ✅ **Minimal overhead** - Just append to JSONL file
 
 ---
 
