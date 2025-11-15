@@ -45,8 +45,10 @@ async def query_fills_via_api():
 
     # Always generate a fresh token (tokens expire after 1 hour)
     # This ensures we have a valid token for each API request
+    # Use the same approach as refresh_ws_token.py
     bearer_token = None
     api_key = os.getenv("API_KEY_PRIVATE_KEY", "")
+    api_key_index = int(os.getenv("API_KEY_INDEX", "3"))
     
     if not api_key:
         print("⚠️  API_KEY_PRIVATE_KEY not set - cannot generate auth token")
@@ -56,56 +58,38 @@ async def query_fills_via_api():
     else:
         print("Generating fresh auth token...")
         try:
-            # Try importing the same way the bot does (via core.trading_client)
-            try:
-                # First try direct import (if installed in site-packages)
-                import lighter  # type: ignore
-                from lighter import SignerClient  # type: ignore
-                print("  ✅ Direct import successful")
-            except ImportError:
-                # Try importing via the bot's module (same as core.trading_client does)
-                try:
-                    import sys
-                    project_root = Path(__file__).parent.parent
-                    sys.path.insert(0, str(project_root))
-                    # Try the same pattern as core.trading_client
-                    import lighter  # type: ignore
-                    from lighter import SignerClient  # type: ignore
-                    print("  ✅ Import via sys.path successful")
-                except ImportError:
-                    # Last resort: try via core.trading_client's import
-                    try:
-                        from core.trading_client import SignerClient
-                        print("  ✅ Import via core.trading_client successful")
-                    except ImportError:
-                        raise ImportError("lighter-python package not found in any location")
+            # Try importing lighter the same way refresh_ws_token.py does
+            # This is the most reliable method since refresh_ws_token.py works
+            from lighter import SignerClient  # type: ignore
             
-            print("  SignerClient imported successfully")
-            signer = SignerClient(
-                url=base_url,
-                private_key=api_key,
-                account_index=account_index,
-                api_key_index=3,
-            )
-            print("  SignerClient created, generating token...")
-            token, err = signer.create_auth_token_with_expiry(deadline=3600)
-            if err:
-                print(f"⚠️  Could not generate token: {err}")
-                # Fallback to env var
-                bearer_token = os.getenv("LIGHTER_API_BEARER", "")
-                if bearer_token:
-                    print("  Falling back to LIGHTER_API_BEARER from environment (may be expired)")
-            else:
-                bearer_token = token
-                print(f"✅ Generated fresh auth token: {token[:30]}...")
-            await signer.close()
+            print("  ✅ SignerClient imported successfully")
+            
+            async def generate_token():
+                signer = SignerClient(
+                    url=base_url,
+                    private_key=api_key,
+                    account_index=account_index,
+                    api_key_index=api_key_index,
+                )
+                try:
+                    token, err = signer.create_auth_token_with_expiry(deadline=3600)
+                    if err:
+                        raise RuntimeError(err)
+                    return token
+                finally:
+                    await signer.close()
+            
+            token = await generate_token()
+            bearer_token = token
+            print(f"✅ Generated fresh auth token: {token[:30]}...")
+            
         except ImportError as e:
             print(f"⚠️  lighter-python not available: {e}")
-            print("  Trying to install or use alternative method...")
+            print("  Falling back to LIGHTER_API_BEARER from environment (may be expired)")
             # Fallback to env var if available
             bearer_token = os.getenv("LIGHTER_API_BEARER", "")
             if bearer_token:
-                print("  Using LIGHTER_API_BEARER from environment (may be expired)")
+                print(f"  Using LIGHTER_API_BEARER: {bearer_token[:30]}...")
             else:
                 print("  ❌ Cannot proceed without token generation or LIGHTER_API_BEARER")
         except Exception as e:
@@ -115,7 +99,7 @@ async def query_fills_via_api():
             # Fallback to env var if available
             bearer_token = os.getenv("LIGHTER_API_BEARER", "")
             if bearer_token:
-                print("  Falling back to LIGHTER_API_BEARER from environment (may be expired)")
+                print(f"  Falling back to LIGHTER_API_BEARER: {bearer_token[:30]}...")
 
     print(f"Querying Lighter API: {base_url}")
     print(f"Account: {account_index}")
