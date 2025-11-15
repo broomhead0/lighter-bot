@@ -337,7 +337,7 @@ railway logs --service lighter-bot --tail 2000 | grep -E "(ERROR|CRITICAL|code=2
 python3 scripts/analyze_time_based_pnl.py --input data/analysis/pnl_5m.csv
 ```
 
-**Next Steps**: 
+**Next Steps**:
 - Run analysis after collecting more data (ideally 7+ days)
 - Compare NY hours (9am-4pm ET) vs overnight vs weekend performance
 - Identify optimal trading windows and potentially pause/scale during unprofitable periods

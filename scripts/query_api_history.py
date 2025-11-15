@@ -43,13 +43,15 @@ async def query_fills_via_api():
                        os.getenv("ACCOUNT_INDEX") or
                        load_config().get("api", {}).get("account_index", 366110))
 
-    # Use Bearer token (like fetch_trades.py does) or generate one
-    bearer_token = os.getenv("LIGHTER_API_BEARER", "")
-    api_key = os.getenv("API_KEY_PRIVATE_KEY", "")  # For generating token if needed
+    # Always generate a fresh token (tokens expire after 1 hour)
+    # This ensures we have a valid token for each API request
+    bearer_token = None
+    api_key = os.getenv("API_KEY_PRIVATE_KEY", "")
     
-    # If no bearer token, generate one using SignerClient
-    if not bearer_token and api_key:
-        print("No bearer token found, generating one...")
+    if not api_key:
+        print("⚠️  API_KEY_PRIVATE_KEY not set - cannot generate auth token")
+    else:
+        print("Generating fresh auth token...")
         try:
             import lighter
             from lighter import SignerClient
@@ -65,18 +67,28 @@ async def query_fills_via_api():
                 print(f"⚠️  Could not generate token: {err}")
             else:
                 bearer_token = token
-                print("✅ Generated auth token")
+                print("✅ Generated fresh auth token")
             await signer.close()
+        except ImportError:
+            print("⚠️  lighter-python not available - cannot generate token")
+            # Fallback to env var if available
+            bearer_token = os.getenv("LIGHTER_API_BEARER", "")
+            if bearer_token:
+                print("  Using LIGHTER_API_BEARER from environment (may be expired)")
         except Exception as e:
             print(f"⚠️  Could not generate token: {e}")
-    
+            # Fallback to env var if available
+            bearer_token = os.getenv("LIGHTER_API_BEARER", "")
+            if bearer_token:
+                print("  Using LIGHTER_API_BEARER from environment (may be expired)")
+
     print(f"Querying Lighter API: {base_url}")
     print(f"Account: {account_index}")
     print()
-    
+
     if not bearer_token:
         print("⚠️  No bearer token found. Trying unauthenticated endpoints...")
-    
+
     # Common endpoints for order/fill history
     endpoints = [
         # Standard REST API patterns
@@ -127,35 +139,35 @@ async def query_fills_via_api():
                     "auth": bearer_token,
                 }
                 print(f"Trying: {url} with auth token")
-                
+
                 resp = client.get(url, params=params_trades, headers=headers)
                 print(f"  Status: {resp.status_code}")
-                
+
                 if resp.status_code == 200:
                     data = resp.json()
                     # Check if it's wrapped
                     trades = data.get("trades") if isinstance(data, dict) else data
                     if trades is None:
                         trades = data if isinstance(data, list) else []
-                    
+
                     count = len(trades) if isinstance(trades, list) else 1
                     print(f"  ✅ Success! Got {count} items")
-                    
+
                     if isinstance(trades, list) and len(trades) > 0:
                         print(f"  ✅ Looks like trade data!")
                         return trades
                 elif resp.status_code == 400:
                     print(f"  ❌ Error: {resp.text[:200]}")
-            
+
             # Try other endpoints (without auth for now)
             for endpoint in endpoints:
                 if "/api/v1/trades" in endpoint:
                     continue  # Already tried above
-                    
+
                 try:
                     url = f"{base_url}{endpoint}"
                     print(f"Trying: {url}")
-                    
+
                     resp = client.get(url, headers=headers)
                     print(f"  Status: {resp.status_code}")
 
