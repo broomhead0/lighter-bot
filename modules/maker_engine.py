@@ -10,6 +10,27 @@ from typing import Any, Deque, Dict, Optional, Tuple
 
 from core.trading_client import TradingClient, TradingConfig
 
+# Feature modules (optional - for incremental enable/disable)
+# Initialize to None first to prevent NameError if imports fail
+TrendFilter = None  # type: ignore
+InventoryAdjustments = None  # type: ignore
+PnLGuard = None  # type: ignore
+
+try:
+    from modules.features.trend_filter import TrendFilter  # noqa
+except Exception:  # noqa
+    pass
+
+try:
+    from modules.features.inventory_adjustments import InventoryAdjustments  # noqa
+except Exception:  # noqa
+    pass
+
+try:
+    from modules.features.pnl_guard import PnLGuard  # noqa
+except Exception:  # noqa
+    pass
+
 LOG = logging.getLogger("maker")
 
 
