@@ -21,16 +21,25 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
-import yaml
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 
+# Try importing yaml (optional - can use env vars instead)
+try:
+    import yaml
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
+
 
 def load_config(path: Path) -> Dict[str, Any]:
-    if not path.exists():
+    if not HAS_YAML or not path.exists():
         return {}
-    with path.open("r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or {}
+    except Exception:
+        return {}
 
 
 def generate_fresh_token() -> Optional[str]:
