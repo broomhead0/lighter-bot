@@ -231,19 +231,22 @@ async def main() -> None:
         )
     account_index = int(account)
 
-    # Get bearer token
-    bearer_token = args.token or os.getenv("LIGHTER_API_BEARER")
-
-    # If no token provided, try to generate one
+    # Get bearer token - always try to generate fresh first, then fall back to provided/env var
+    print("Attempting to generate fresh auth token...")
+    bearer_token = generate_fresh_token()
+    
+    # If generation failed, fall back to provided token or env var
     if not bearer_token:
-        print("No bearer token provided, attempting to generate fresh token...")
-        bearer_token = generate_fresh_token()
-
+        print("Token generation failed, using provided token or LIGHTER_API_BEARER env var...")
+        bearer_token = args.token or os.getenv("LIGHTER_API_BEARER")
+        
         if not bearer_token:
             raise SystemExit(
                 "Missing auth token. Set LIGHTER_API_BEARER env var, "
-                "pass --token, or ensure refresh_ws_token.py can generate a token."
+                "pass --token, or ensure lighter-python is installed to generate a token."
             )
+        else:
+            print(f"Using provided token: {bearer_token[:30]}...")
 
     # Fetch all trades
     all_trades = await fetch_all_trades(
