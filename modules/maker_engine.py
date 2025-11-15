@@ -169,6 +169,26 @@ class MakerEngine:
                 # Will switch to feature module after testing extraction works
             except Exception as exc:
                 LOG.warning("[maker] failed to initialize trend feature module: %s", exc)
+        
+        # Inventory adjustments feature
+        self._inventory_feature: Optional[InventoryAdjustments] = None
+        if InventoryAdjustments is not None:
+            try:
+                # Initialize from inventory config (can be empty for defaults)
+                inv_cfg = config.get("features", {}).get("inventory", {}) or {}
+                self._inventory_feature = InventoryAdjustments(inv_cfg, state=state)
+                self._inventory_feature.set_market(self.market)
+            except Exception as exc:
+                LOG.warning("[maker] failed to initialize inventory feature module: %s", exc)
+        
+        # PnL guard feature
+        self._pnl_guard_feature: Optional[PnLGuard] = None
+        if PnLGuard is not None and self.pnl_guard_enabled:
+            try:
+                self._pnl_guard_feature = PnLGuard(pnl_guard_cfg, state=state, telemetry=telemetry)
+                self._pnl_guard_feature.set_market(self.market)
+            except Exception as exc:
+                LOG.warning("[maker] failed to initialize PnL guard feature module: %s", exc)
         regimes_cfg = maker_cfg.get("regimes") or {}
         aggressive_cfg = regimes_cfg.get("aggressive") or {}
         defensive_cfg = regimes_cfg.get("defensive") or {}
@@ -246,7 +266,11 @@ class MakerEngine:
                     await asyncio.sleep(1.0)
                     continue
 
-                self._maybe_expire_pnl_guard()
+                # PnL guard check (use feature module if available, else old logic)
+                if self._pnl_guard_feature and self._pnl_guard_feature.enabled:
+                    self._pnl_guard_feature.check_and_update()
+                else:
+                    self._maybe_expire_pnl_guard()
 
                 volatility_bps = self._update_volatility(mid)
                 self._latest_volatility_bps = volatility_bps
@@ -286,27 +310,29 @@ class MakerEngine:
                     except Exception:
                         pass
 
-                # Phase 2: Inventory-based spread widening
-                # Wider spreads as inventory builds to make fills less attractive
-                inventory_spread_bps = 0.0
-                if inventory_abs > Decimal("0.03"):
-                    inventory_spread_bps = 6.0
-                elif inventory_abs > Decimal("0.02"):
-                    inventory_spread_bps = 4.0
-                elif inventory_abs > Decimal("0.01"):
-                    inventory_spread_bps = 2.0
+                # Inventory-based adjustments (use feature module if available, else old logic)
+                if self._inventory_feature and self._inventory_feature.enabled:
+                    inventory_spread_bps = self._inventory_feature.get_spread_adjustment_bps(inventory)
+                    inventory_size_multiplier = self._inventory_feature.get_size_multiplier(inventory)
+                else:
+                    # Old logic: tiered thresholds
+                    inventory_spread_bps = 0.0
+                    if inventory_abs > Decimal("0.03"):
+                        inventory_spread_bps = 6.0
+                    elif inventory_abs > Decimal("0.02"):
+                        inventory_spread_bps = 4.0
+                    elif inventory_abs > Decimal("0.01"):
+                        inventory_spread_bps = 2.0
+                    
+                    inventory_size_multiplier = 1.0
+                    if inventory_abs > Decimal("0.02"):
+                        inventory_size_multiplier = 0.50
+                    elif inventory_abs > Decimal("0.01"):
+                        inventory_size_multiplier = 0.75
 
                 bid, ask, spread = self._compute_quotes(
                     mid, volatility_bps, extra_spread_bps=extra_spread + inventory_spread_bps
                 )
-
-                # Phase 2: Inventory-based size reduction
-                # Reduce size when inventory exists to prevent adding to position
-                inventory_size_multiplier = 1.0
-                if inventory_abs > Decimal("0.02"):
-                    inventory_size_multiplier = 0.50
-                elif inventory_abs > Decimal("0.01"):
-                    inventory_size_multiplier = 0.75
 
                 # Compute base quote size (includes PnL guard multiplier inside)
                 quote_size = self._compute_quote_size(mid, volatility_bps)
@@ -494,8 +520,12 @@ class MakerEngine:
         )
         if self._regime_spread_bonus > 0.0:
             base_spread += self._regime_spread_bonus
+        # PnL guard spread adjustment (use feature module if available, else old logic)
         if self.pnl_guard_enabled:
-            base_spread += max(0.0, self._pnl_guard_spread_extra)
+            if self._pnl_guard_feature and self._pnl_guard_feature.enabled:
+                base_spread += max(0.0, self._pnl_guard_feature.get_spread_adjustment_bps())
+            else:
+                base_spread += max(0.0, self._pnl_guard_spread_extra)
         jitter = random.uniform(-self.randomize_bps, self.randomize_bps)
         bps = max(1e-6, base_spread + jitter)
 

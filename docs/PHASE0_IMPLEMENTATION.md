@@ -36,8 +36,14 @@ Given the size of the codebase (maker_engine.py: ~1152 lines, hedger.py: ~700+ l
   - [x] Created TrendFilter class
   - [x] Integrated into maker_engine.py with fallback
   - [x] Old logic still runs by default (no behavior change)
-- [ ] Extract inventory adjustments  
-- [ ] Extract PnL guard
+- [x] Extract inventory adjustments → `modules/features/inventory_adjustments.py` (140 lines)
+  - [x] Created InventoryAdjustments class
+  - [x] Tiered thresholds (can simplify to binary later)
+  - [ ] Integrate into maker_engine
+- [x] Extract PnL guard → `modules/features/pnl_guard.py` (180 lines)
+  - [x] Created PnLGuard class
+  - [x] Reactive spread/size adjustments
+  - [ ] Integrate into maker_engine
 - [ ] Extract volatility adjustments
 - [ ] Extract regime switcher
 - [ ] Extract hedger passive logic
