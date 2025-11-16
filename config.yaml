@@ -27,11 +27,11 @@ maker:
   exchange_min_size: 0.061
   # Lower soft cap to trigger earlier (findings: inventory buildup causes bleed)
   inventory_soft_cap: 0.05
-  spread_bps: 13.0  # Widened slightly for overnight conservatism (was 12.0)
+  spread_bps: 15.0  # Baseline: conservative fixed spread
   price_scale: 1000
   size_scale: 1000
   volatility:
-    enabled: true
+    enabled: false
     low_bps: 6
     high_bps: 22
     # Shortened from 45s to 35s for faster response to volatility changes
@@ -53,7 +53,7 @@ maker:
     low_vol_pause_threshold_bps: 0.0
     low_vol_resume_threshold_bps: 0.1
   trend:
-    enabled: true
+    enabled: false
     lookback_seconds: 45
     threshold_bps: 12
     # Lower threshold to trigger earlier on softer downtrends (findings show -$13/window in downtrends)
@@ -75,15 +75,14 @@ maker:
     aggressive:
       size_multiplier: 1.0
       extra_spread_bps: 0.0
-      down_cooldown_seconds: 20
+      down_cooldown_seconds: 0
     defensive:
-      size_multiplier: 0.7
-      extra_spread_bps: 2.0
-      # Longer cooldown in defensive regime during downtrends (findings: downtrends problematic)
-      down_cooldown_seconds: 60
+      size_multiplier: 1.0
+      extra_spread_bps: 0.0
+      down_cooldown_seconds: 0
   exchange_min_notional: 10.5
   pnl_guard:
-    enabled: true
+    enabled: false
     window_seconds: 300
     # Trigger earlier and immediately to prevent deeper losses
     realized_floor_quote: -0.20  # Trigger earlier (was -0.50)
