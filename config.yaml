@@ -15,7 +15,7 @@ capture:
   raw_path: logs/ws_raw.jsonl
   write_raw: true
 maker:
-  dry_run: true
+  dry_run: false
   limits:
     max_cancels: 30
     max_latency_ms: 2000
